@@ -1,0 +1,12 @@
+{
+  "commodities": [
+    {"id":"food","base_price":10,"volatility":0.2},
+    {"id":"water","base_price":8,"volatility":0.15},
+    {"id":"ore","base_price":20,"volatility":0.3},
+    {"id":"fuel","base_price":35,"volatility":0.25},
+    {"id":"electronics","base_price":80,"volatility":0.4},
+    {"id":"medicine","base_price":120,"volatility":0.35},
+    {"id":"machinery","base_price":70,"volatility":0.3},
+    {"id":"luxuries","base_price":250,"volatility":0.5}
+  ]
+}

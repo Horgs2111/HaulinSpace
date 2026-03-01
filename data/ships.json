@@ -1,0 +1,19 @@
+{
+  "ships":[
+    {"name":"Rustrunner Shuttle","tier":1,"cargo":20,"speed":5,"turn_rate":8,"inertia":2,"weapon_slots":1,"upgrade_slots":1,"price":1000},
+    {"name":"Cinder Scout","tier":1,"cargo":25,"speed":6,"turn_rate":9,"inertia":2,"weapon_slots":1,"upgrade_slots":2,"price":3000},
+    {"name":"Mercury Courier","tier":2,"cargo":35,"speed":7,"turn_rate":8,"inertia":3,"weapon_slots":1,"upgrade_slots":2,"price":7000},
+    {"name":"Atlas Freighter","tier":2,"cargo":60,"speed":4,"turn_rate":5,"inertia":5,"weapon_slots":2,"upgrade_slots":2,"price":12000},
+    {"name":"Drake Raider","tier":2,"cargo":30,"speed":7,"turn_rate":7,"inertia":3,"weapon_slots":2,"upgrade_slots":2,"price":14000},
+    {"name":"Nova Trader","tier":3,"cargo":80,"speed":4,"turn_rate":5,"inertia":6,"weapon_slots":2,"upgrade_slots":3,"price":25000},
+    {"name":"Falcon Interceptor","tier":3,"cargo":35,"speed":9,"turn_rate":10,"inertia":3,"weapon_slots":3,"upgrade_slots":2,"price":30000},
+    {"name":"Orion Gunship","tier":3,"cargo":45,"speed":6,"turn_rate":6,"inertia":4,"weapon_slots":3,"upgrade_slots":3,"price":42000},
+    {"name":"Titan Hauler","tier":4,"cargo":120,"speed":3,"turn_rate":4,"inertia":8,"weapon_slots":2,"upgrade_slots":4,"price":65000},
+    {"name":"Viper Strikecraft","tier":4,"cargo":40,"speed":10,"turn_rate":10,"inertia":3,"weapon_slots":4,"upgrade_slots":3,"price":70000},
+    {"name":"Sentinel Frigate","tier":4,"cargo":90,"speed":5,"turn_rate":5,"inertia":6,"weapon_slots":4,"upgrade_slots":4,"price":90000},
+    {"name":"Leviathan Freighter","tier":5,"cargo":200,"speed":2,"turn_rate":3,"inertia":10,"weapon_slots":3,"upgrade_slots":5,"price":150000},
+    {"name":"Phantom Stealth","tier":5,"cargo":50,"speed":9,"turn_rate":9,"inertia":4,"weapon_slots":4,"upgrade_slots":4,"price":180000},
+    {"name":"Aegis Destroyer","tier":5,"cargo":100,"speed":6,"turn_rate":5,"inertia":7,"weapon_slots":5,"upgrade_slots":5,"price":220000},
+    {"name":"Celestial Dreadnought","tier":6,"cargo":150,"speed":4,"turn_rate":4,"inertia":9,"weapon_slots":6,"upgrade_slots":6,"price":350000}
+  ]
+}

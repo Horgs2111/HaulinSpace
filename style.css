@@ -1,0 +1,1142 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #020710;
+  color: #ccd6f0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  overflow: hidden;
+  width: 1200px;
+  height: 800px;
+}
+
+canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* ─── HUD ────────────────────────────────────────────────────────────────── */
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  gap: 0;
+  background: rgba(2, 6, 20, 0.90);
+  border-bottom: 1px solid rgba(60, 100, 200, 0.28);
+  z-index: 10;
+}
+
+#hud-ship {
+  font-size: 14px;
+  font-weight: 600;
+  color: #aabfd8;
+  min-width: 180px;
+}
+
+#hud-location {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e8f0ff;
+  min-width: 140px;
+}
+
+.hud-sep {
+  width: 1px;
+  height: 22px;
+  background: rgba(80, 120, 200, 0.28);
+  margin: 0 18px;
+}
+
+.hud-stat {
+  font-size: 13px;
+  color: #667799;
+  min-width: 120px;
+}
+
+.hud-stat span {
+  color: #ccd6f0;
+  font-weight: 600;
+}
+
+.hud-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: #334455;
+}
+
+.btn-fit {
+  margin-left: 14px;
+  background: none;
+  border: 1px solid rgba(80, 130, 210, 0.30);
+  color: #556688;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-fit:hover {
+  border-color: rgba(80, 130, 210, 0.70);
+  color: #88aacc;
+}
+
+.btn-cog {
+  margin-left: 10px;
+  background: none;
+  border: 1px solid rgba(80, 130, 210, 0.30);
+  color: #556688;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-cog:hover,
+.btn-cog.active {
+  border-color: rgba(80, 130, 210, 0.70);
+  color: #88aacc;
+}
+
+/* ─── Settings panel ─────────────────────────────────────────────────────── */
+
+.settings-panel {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  width: 220px;
+  background: rgba(4, 10, 30, 0.97);
+  border: 1px solid rgba(60, 100, 200, 0.35);
+  border-radius: 6px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  padding-bottom: 12px;
+}
+
+.settings-panel.hidden {
+  display: none;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid rgba(60, 100, 200, 0.22);
+  margin-bottom: 8px;
+}
+
+.settings-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #aabfd8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.settings-close {
+  background: none;
+  border: none;
+  color: #445566;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.settings-close:hover {
+  color: #88aacc;
+}
+
+.settings-btn {
+  display: block;
+  width: calc(100% - 28px);
+  margin: 4px 14px 0;
+  background: none;
+  border: 1px solid rgba(80, 130, 210, 0.28);
+  color: #8899bb;
+  padding: 7px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.settings-btn:hover:not(:disabled) {
+  border-color: rgba(80, 130, 210, 0.65);
+  color: #ccd6f0;
+  background: rgba(40, 70, 140, 0.18);
+}
+
+.settings-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.settings-divider {
+  height: 1px;
+  background: rgba(60, 100, 200, 0.18);
+  margin: 12px 14px 8px;
+}
+
+.settings-volume-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+  gap: 10px;
+  font-size: 12px;
+  color: #667799;
+}
+
+.settings-volume-row input[type="range"] {
+  flex: 1;
+  accent-color: #4477cc;
+}
+
+/* ─── Panels ─────────────────────────────────────────────────────────────── */
+
+.panel {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(3, 8, 24, 0.94);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel.hidden {
+  display: none;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(60, 100, 200, 0.22);
+  flex-shrink: 0;
+}
+
+.panel-header-text h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ddeeff;
+  letter-spacing: 0.02em;
+}
+
+.landing-meta {
+  font-size: 13px;
+  color: #556688;
+  margin-top: 3px;
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 28px;
+}
+
+.panel-body::-webkit-scrollbar { width: 5px; }
+.panel-body::-webkit-scrollbar-track { background: transparent; }
+.panel-body::-webkit-scrollbar-thumb { background: rgba(60, 100, 180, 0.35); border-radius: 3px; }
+
+/* Back button */
+
+.btn-back {
+  background: none;
+  border: 1px solid rgba(80, 130, 210, 0.32);
+  color: #5577aa;
+  padding: 7px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-back:hover {
+  border-color: rgba(80, 130, 210, 0.75);
+  color: #99bbee;
+}
+
+/* ─── Market panel ───────────────────────────────────────────────────────── */
+
+.market-cargo-info {
+  margin-left: auto;
+  font-size: 13px;
+  color: #667799;
+  white-space: nowrap;
+}
+
+.market-cargo-info span {
+  color: #ccd6f0;
+  font-weight: 600;
+}
+
+.market-table {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.market-header-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px 70px 156px;
+  gap: 8px;
+  padding: 0 16px 10px;
+  font-size: 11px;
+  color: #445566;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(60, 100, 180, 0.18);
+  margin-bottom: 4px;
+}
+
+.market-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px 70px 156px;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border-radius: 5px;
+  border: 1px solid rgba(60, 100, 180, 0.14);
+  background: rgba(8, 18, 50, 0.45);
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.market-row:hover {
+  border-color: rgba(60, 100, 180, 0.32);
+  background: rgba(12, 26, 68, 0.55);
+}
+
+.market-row.unstocked {
+  opacity: 0.38;
+}
+
+.market-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ccd6f0;
+}
+
+.market-name .planet-type-badge {
+  font-size: 10px;
+  font-weight: 400;
+  color: #445566;
+  margin-left: 6px;
+  letter-spacing: 0.05em;
+}
+
+.price-col {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.price-cheap  { color: #66cc88; }
+.price-normal { color: #ccd6f0; }
+.price-dear   { color: #cc8844; }
+.price-sell   { color: #aa8866; }
+.price-na     { color: #334455; }
+
+.comm-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-left: 5px;
+}
+
+.illegal-tag {
+  background: rgba(200, 50, 40, 0.22);
+  color: #cc5544;
+  border: 1px solid rgba(200, 50, 40, 0.35);
+}
+
+.market-owned {
+  font-size: 14px;
+  text-align: center;
+  color: #445566;
+}
+
+.market-owned.in-hold {
+  color: #ddeeff;
+  font-weight: 700;
+}
+
+.market-actions {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.btn-buy,
+.btn-sell {
+  padding: 5px 16px;
+  border-radius: 4px;
+  border: 1px solid;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.12s;
+}
+
+.btn-buy {
+  border-color: rgba(80, 190, 110, 0.45);
+  background: rgba(30, 90, 50, 0.35);
+  color: #77dd99;
+}
+
+.btn-buy:hover:not(:disabled) {
+  background: rgba(30, 90, 50, 0.65);
+}
+
+.btn-sell {
+  border-color: rgba(190, 140, 60, 0.45);
+  background: rgba(90, 60, 20, 0.35);
+  color: #ddaa66;
+}
+
+.btn-sell:hover:not(:disabled) {
+  background: rgba(90, 60, 20, 0.65);
+}
+
+.btn-buy:disabled,
+.btn-sell:disabled {
+  opacity: 0.22;
+  cursor: not-allowed;
+}
+
+/* ─── Planet landing ─────────────────────────────────────────────────────── */
+
+.planet-block {
+  margin-bottom: 36px;
+}
+
+.planet-block + .planet-block {
+  border-top: 1px solid rgba(60, 100, 180, 0.18);
+  padding-top: 32px;
+}
+
+.planet-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7799bb;
+  margin-bottom: 16px;
+}
+
+.no-planets {
+  color: #3d5066;
+  font-size: 14px;
+  padding: 16px 0;
+}
+
+/* ─── Facility grid ──────────────────────────────────────────────────────── */
+
+.facility-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.facility-btn {
+  padding: 18px 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(80, 130, 210, 0.28);
+  background: rgba(8, 18, 50, 0.55);
+  color: #ccd6f0;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+}
+
+.facility-btn:not(:disabled):hover {
+  border-color: rgba(80, 130, 210, 0.72);
+  background: rgba(16, 36, 90, 0.65);
+}
+
+.facility-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.facility-btn .f-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ddeeff;
+  margin-bottom: 6px;
+}
+
+.facility-btn .f-desc {
+  font-size: 12px;
+  color: #667788;
+  line-height: 1.45;
+}
+
+/* ─── Shared panel header right slot ─────────────────────────────────────── */
+
+.panel-header-right {
+  margin-left: auto;
+  font-size: 13px;
+  color: #667799;
+  white-space: nowrap;
+}
+
+.panel-header-right span {
+  color: #ccd6f0;
+  font-weight: 600;
+}
+
+/* ─── Shipyard ────────────────────────────────────────────────────────────── */
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #445566;
+  margin-bottom: 14px;
+}
+
+.section-title + .section-title {
+  margin-top: 32px;
+}
+
+.ship-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.ship-card {
+  border: 1px solid rgba(60, 100, 180, 0.22);
+  background: rgba(8, 18, 50, 0.50);
+  border-radius: 7px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ship-card.current-ship {
+  border-color: rgba(80, 190, 110, 0.40);
+  background: rgba(8, 28, 18, 0.55);
+}
+
+.ship-card.cant-afford {
+  opacity: 0.42;
+}
+
+.ship-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.ship-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ddeeff;
+}
+
+.ship-card-tier {
+  font-size: 11px;
+  color: #445566;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ship-card-current-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #55bb77;
+}
+
+.ship-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px 6px;
+}
+
+.stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: #445566;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #aabfd8;
+}
+
+.stat-delta-better {
+  font-size: 11px;
+  color: #66cc88;
+}
+
+.stat-delta-worse {
+  font-size: 11px;
+  color: #cc6655;
+}
+
+.ship-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(60, 100, 180, 0.15);
+}
+
+.ship-price {
+  font-size: 13px;
+  color: #8899bb;
+  line-height: 1.5;
+}
+
+.ship-price strong {
+  color: #ccd6f0;
+  font-size: 15px;
+}
+
+.ship-price .trade-in-note {
+  display: block;
+  font-size: 11px;
+  color: #55bb77;
+}
+
+.btn-purchase {
+  padding: 7px 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(80, 190, 110, 0.45);
+  background: rgba(30, 90, 50, 0.40);
+  color: #77dd99;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.btn-purchase:hover:not(:disabled) {
+  background: rgba(30, 90, 50, 0.70);
+}
+
+.btn-purchase:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* ─── Upgrade shop ────────────────────────────────────────────────────────── */
+
+.upgrades-ship-summary {
+  border: 1px solid rgba(60, 100, 180, 0.20);
+  background: rgba(8, 18, 50, 0.45);
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.upgrades-ship-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ddeeff;
+  margin-bottom: 10px;
+}
+
+.upgrades-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  font-size: 13px;
+  color: #8899bb;
+}
+
+.upgrades-stat-row span strong {
+  color: #ccd6f0;
+}
+
+.upgrades-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upgrade-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 110px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(60, 100, 180, 0.16);
+  background: rgba(8, 18, 50, 0.45);
+  transition: border-color 0.12s;
+}
+
+.upgrade-row:hover {
+  border-color: rgba(60, 100, 180, 0.35);
+}
+
+.upgrade-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ccd6f0;
+  margin-bottom: 4px;
+}
+
+.upgrade-effect {
+  font-size: 12px;
+  color: #667799;
+}
+
+.upgrade-price {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8899bb;
+  text-align: right;
+}
+
+.btn-install {
+  padding: 6px 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(100, 160, 220, 0.40);
+  background: rgba(20, 50, 100, 0.40);
+  color: #88aadd;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.12s;
+  justify-self: end;
+}
+
+.btn-install:hover:not(:disabled) {
+  background: rgba(20, 50, 100, 0.70);
+}
+
+.btn-install:disabled {
+  opacity: 0.22;
+  cursor: not-allowed;
+}
+
+/* ─── Title / Menu / Options screens ─────────────────────────────────────── */
+
+.fullscreen-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  /* No background — canvas starfield shows through */
+}
+
+.fullscreen-overlay.hidden {
+  display: none;
+}
+
+/* Title screen */
+
+.title-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 80px;
+}
+
+.title-logo {
+  font-size: 72px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow:
+    0 0 30px rgba(100, 160, 255, 1.0),
+    0 0 70px rgba(80, 130, 255, 0.6),
+    0 0 120px rgba(60, 100, 220, 0.3);
+  margin-bottom: 14px;
+}
+
+.title-tagline {
+  font-size: 14px;
+  letter-spacing: 0.30em;
+  text-transform: uppercase;
+  color: #3d5880;
+}
+
+.title-press-key {
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #2a3f5e;
+  animation: title-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes title-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.08; }
+}
+
+/* Main menu */
+
+.menu-logo {
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ddeeff;
+  text-shadow: 0 0 22px rgba(80, 130, 255, 0.55);
+  margin-bottom: 44px;
+}
+
+.menu-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 240px;
+}
+
+.menu-btn {
+  padding: 14px 0;
+  border-radius: 5px;
+  border: 1px solid rgba(80, 130, 210, 0.32);
+  background: rgba(6, 14, 44, 0.75);
+  color: #8899bb;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.menu-btn:hover:not(:disabled) {
+  border-color: rgba(80, 130, 210, 0.78);
+  color: #ddeeff;
+  background: rgba(14, 32, 88, 0.85);
+}
+
+.menu-btn:disabled {
+  opacity: 0.22;
+  cursor: not-allowed;
+}
+
+/* Options */
+
+.options-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ddeeff;
+  margin-bottom: 36px;
+}
+
+.options-body {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-bottom: 40px;
+}
+
+.options-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 13px;
+  color: #6677aa;
+}
+
+.options-row input[type="range"] {
+  flex: 1;
+  accent-color: #4d7acc;
+}
+
+/* ─── Game over screen ───────────────────────────────────────────────────── */
+
+.gameover-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+}
+
+.gameover-title {
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #ff5555;
+  text-shadow:
+    0 0 24px rgba(255, 60, 60, 0.9),
+    0 0 60px rgba(220, 40, 40, 0.45);
+}
+
+.gameover-sub {
+  font-size: 14px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #4a3333;
+  margin-bottom: 18px;
+}
+
+/* ─── Galaxy map overlay ─────────────────────────────────────────────────── */
+
+.map-overlay {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 22;
+}
+
+.map-overlay.hidden {
+  display: none;
+}
+
+.map-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  background: rgba(2, 6, 20, 0.90);
+  border-bottom: 1px solid rgba(60, 100, 200, 0.28);
+  pointer-events: all;
+}
+
+.map-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #7799cc;
+  flex-shrink: 0;
+}
+
+.map-hint {
+  font-size: 12px;
+  color: #334455;
+  flex: 1;
+}
+
+.map-close-btn {
+  background: none;
+  border: 1px solid rgba(80, 130, 210, 0.30);
+  color: #556688;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.map-close-btn:hover {
+  border-color: rgba(80, 130, 210, 0.70);
+  color: #88aacc;
+}
+
+/* ─── Black market ───────────────────────────────────────────────────────── */
+
+#panel-blackmarket .panel-header {
+  border-bottom-color: rgba(200, 50, 50, 0.28);
+}
+
+#panel-blackmarket h2 {
+  color: #ff7755;
+}
+
+.bm-warning {
+  padding: 10px 24px;
+  font-size: 12px;
+  color: rgba(220, 100, 80, 0.75);
+  border-bottom: 1px solid rgba(200, 50, 50, 0.15);
+  margin-bottom: 4px;
+}
+
+.bm-section-label {
+  padding: 12px 24px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #664444;
+}
+
+/* ─── Mission board ──────────────────────────────────────────────────────── */
+
+.mission-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.mission-card {
+  border: 1px solid rgba(60, 100, 180, 0.22);
+  background: rgba(8, 18, 50, 0.50);
+  border-radius: 7px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mission-card.active {
+  border-color: rgba(80, 190, 110, 0.28);
+  background: rgba(8, 28, 18, 0.45);
+}
+
+.mission-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mission-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ddeeff;
+}
+
+.mission-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.mission-type-delivery  { background: rgba(80, 130, 210, 0.25); color: #7799cc; }
+.mission-type-bounty    { background: rgba(200, 80,  60, 0.25);  color: #cc6655; }
+.mission-type-smuggling { background: rgba(180, 140, 40, 0.25);  color: #ccaa44; }
+
+.mission-desc {
+  font-size: 13px;
+  color: #667799;
+  line-height: 1.5;
+}
+
+.mission-card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(60, 100, 180, 0.15);
+}
+
+.mission-reward {
+  font-size: 15px;
+  font-weight: 700;
+  color: #88cc66;
+  margin-bottom: 4px;
+}
+
+.mission-meta {
+  font-size: 11px;
+  color: #445566;
+  letter-spacing: 0.04em;
+}
+
+.btn-accept {
+  padding: 6px 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(80, 190, 110, 0.45);
+  background: rgba(30, 90, 50, 0.40);
+  color: #77dd99;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+
+.btn-accept:hover:not(:disabled) { background: rgba(30, 90, 50, 0.70); }
+.btn-accept:disabled { opacity: 0.22; cursor: not-allowed; }
+
+.btn-abandon {
+  padding: 6px 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(180, 60, 60, 0.38);
+  background: rgba(80, 20, 20, 0.38);
+  color: #cc6655;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+
+.btn-abandon:hover { background: rgba(80, 20, 20, 0.65); }
+
+/* ─── HUD jump status ────────────────────────────────────────────────────── */
+
+.hud-jump {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  min-width: 160px;
+  color: #334455;
+}
+
+.hud-jump.hud-jump-ready {
+  color: #55dd88;
+  text-shadow: 0 0 10px rgba(60, 200, 100, 0.55);
+}
+
+.hud-jump.hud-jump-set {
+  color: #557799;
+}

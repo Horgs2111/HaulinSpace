@@ -1,0 +1,11 @@
+{
+  "upgrades":[
+    {"name":"Cargo Expansion","effect":"cargo+20"},
+    {"name":"Improved Thrusters","effect":"speed+1"},
+    {"name":"Advanced Maneuvering Jets","effect":"turn_rate+1"},
+    {"name":"Inertia Dampeners","effect":"inertia-1"},
+    {"name":"Shield Generator","effect":"hp+50"},
+    {"name":"Targeting Computer","effect":"damage+10%"},
+    {"name":"Fuel Efficiency Module","effect":"jump_cost-20%"}
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "events":[
+    {
+      "name":"Supernova",
+      "effect":"system_unreachable",
+      "duration":5
+    },
+    {
+      "name":"Trade Boom",
+      "effect":"commodity_prices_up",
+      "duration":10
+    },
+    {
+      "name":"Pirate Invasion",
+      "effect":"combat_frequency_high",
+      "duration":8
+    },
+    {
+      "name":"Mining Rush",
+      "effect":"ore_prices_drop",
+      "duration":12
+    },
+    {
+      "name":"Fuel Shortage",
+      "effect":"fuel_prices_up",
+      "duration":10
+    }
+  ]
+}

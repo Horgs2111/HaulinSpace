@@ -1,0 +1,24 @@
+{
+  "systems": [
+    {"id": 1, "name": "Solara", "connections": [2,3], "planets": [1]},
+    {"id": 2, "name": "Dravos", "connections": [1,4,5], "planets": [2]},
+    {"id": 3, "name": "Kepleron", "connections": [1,6], "planets": [3]},
+    {"id": 4, "name": "Zentari", "connections": [2,7], "planets": [4]},
+    {"id": 5, "name": "Helion", "connections": [2,8], "planets": [5]},
+    {"id": 6, "name": "Arcadia", "connections": [3,9], "planets": [6]},
+    {"id": 7, "name": "Tyr", "connections": [4,10], "planets": [7]},
+    {"id": 8, "name": "Nexus", "connections": [5,11], "planets": [8]},
+    {"id": 9, "name": "Orionis", "connections": [6,12], "planets": [9]},
+    {"id": 10, "name": "Pyros", "connections": [7,13], "planets": [10]},
+    {"id": 11, "name": "Icarus", "connections": [8,14], "planets": [11]},
+    {"id": 12, "name": "Velorum", "connections": [9,15], "planets": [12]},
+    {"id": 13, "name": "Xandar", "connections": [10,16], "planets": [13]},
+    {"id": 14, "name": "Aquila", "connections": [11,17], "planets": [14]},
+    {"id": 15, "name": "Rhea", "connections": [12,18], "planets": [15]},
+    {"id": 16, "name": "Nova Reach", "connections": [13,19], "planets": [16]},
+    {"id": 17, "name": "Eos", "connections": [14,20], "planets": [17]},
+    {"id": 18, "name": "Altair", "connections": [15,21], "planets": [18]},
+    {"id": 19, "name": "Borealis", "connections": [16,22], "planets": [19]},
+    {"id": 20, "name": "Gamma Verge", "connections": [17,23], "planets": [20]}
+  ]
+}

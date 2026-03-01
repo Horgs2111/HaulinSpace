@@ -1,0 +1,6 @@
+for testing purposes, obviously....
+
+Open the browser console (F12) and run:
+
+player.credits = 100000
+updateHUD()

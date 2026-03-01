@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Haulin Space</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<canvas id="gameCanvas" width="1200" height="800"></canvas>
+
+<!-- Always-visible HUD -->
+<div id="hud" class="hidden">
+  <div id="hud-ship">—</div>
+  <div class="hud-sep"></div>
+  <div id="hud-location">—</div>
+  <div class="hud-sep"></div>
+  <div class="hud-stat">Credits <span id="hud-credits">—</span></div>
+  <div class="hud-sep"></div>
+  <div class="hud-stat">Cargo <span id="hud-cargo">—</span></div>
+  <div class="hud-sep"></div>
+  <div id="hud-jump" class="hud-jump"></div>
+  <div class="hud-hint">W/A/D to fly&nbsp;&nbsp;·&nbsp;&nbsp;L to land&nbsp;&nbsp;·&nbsp;&nbsp;M galaxy map&nbsp;&nbsp;·&nbsp;&nbsp;J to jump</div>
+  <button class="btn-fit" onclick="resetView()">Fit</button>
+  <button class="btn-cog" id="btn-settings" onclick="toggleSettings()">⚙</button>
+</div>
+
+<!-- In-game settings panel -->
+<div id="panel-settings" class="settings-panel hidden">
+  <div class="settings-header">
+    <span class="settings-title">Settings</span>
+    <button class="settings-close" onclick="closeSettings()">✕</button>
+  </div>
+  <button class="settings-btn" onclick="settingsSaveGame()">Save Game</button>
+  <button class="settings-btn" id="settings-load-btn" onclick="settingsLoadGame()">Load Last Save</button>
+  <div class="settings-divider"></div>
+  <div class="settings-volume-row">
+    <label>Music</label>
+    <input type="range" id="settings-music" min="0" max="100" value="80">
+  </div>
+  <div class="settings-volume-row">
+    <label>SFX</label>
+    <input type="range" id="settings-sfx" min="0" max="100" value="80">
+  </div>
+</div>
+
+<!-- Title screen -->
+<div id="screen-title" class="fullscreen-overlay">
+  <div class="title-hero">
+    <div class="title-logo">HAULIN SPACE</div>
+    <div class="title-tagline">Trade · Explore · Survive</div>
+  </div>
+  <div class="title-press-key">Press any key</div>
+</div>
+
+<!-- Main menu -->
+<div id="screen-menu" class="fullscreen-overlay hidden">
+  <div class="menu-logo">HAULIN SPACE</div>
+  <nav class="menu-nav">
+    <button class="menu-btn" id="btn-new-game">New Game</button>
+    <button class="menu-btn" id="btn-load-game">Load Game</button>
+    <button class="menu-btn" id="btn-options">Options</button>
+  </nav>
+</div>
+
+<!-- Options -->
+<div id="screen-options" class="fullscreen-overlay hidden">
+  <h2 class="options-title">Options</h2>
+  <div class="options-body">
+    <div class="options-row">
+      <span>Music Volume</span>
+      <input type="range" id="opt-music" min="0" max="100" value="80">
+    </div>
+    <div class="options-row">
+      <span>SFX Volume</span>
+      <input type="range" id="opt-sfx" min="0" max="100" value="80">
+    </div>
+  </div>
+  <button class="menu-btn" id="btn-options-back">Back</button>
+</div>
+
+<!-- Game over screen -->
+<div id="screen-gameover" class="fullscreen-overlay hidden">
+  <div class="gameover-content">
+    <div class="gameover-title">SHIP DESTROYED</div>
+    <div class="gameover-sub">Your cargo has been scattered to the void.</div>
+    <button class="menu-btn" id="btn-gameover-load">Load Last Save</button>
+    <button class="menu-btn" id="btn-gameover-new">New Game</button>
+  </div>
+</div>
+
+<!-- Galaxy map overlay (pointer-events:none so canvas gets mouse events) -->
+<div id="overlay-map" class="map-overlay hidden">
+  <div class="map-header">
+    <span class="map-title">Galaxy Map</span>
+    <span class="map-hint">Click a connected system to set jump target&nbsp;&nbsp;·&nbsp;&nbsp;Scroll to zoom&nbsp;&nbsp;·&nbsp;&nbsp;Drag to pan</span>
+    <button class="map-close-btn" onclick="closeGalaxyMap()">Close [M]</button>
+  </div>
+</div>
+
+<!-- Black market panel -->
+<div id="panel-blackmarket" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Planet</button>
+    <div class="panel-header-text">
+      <h2>Black Market</h2>
+      <div id="blackmarket-planet-name" class="landing-meta">—</div>
+    </div>
+    <div class="market-cargo-info">
+      Cargo&nbsp;<span id="bm-cargo-used">0</span>&nbsp;/&nbsp;<span id="bm-cargo-cap">—</span>
+      &nbsp;&nbsp;Credits&nbsp;<span id="bm-credits">—</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="blackmarket-table"></div>
+  </div>
+</div>
+
+<!-- Mission board panel -->
+<div id="panel-missionboard" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Planet</button>
+    <div class="panel-header-text">
+      <h2>Mission Board</h2>
+      <div id="missionboard-planet-name" class="landing-meta">—</div>
+    </div>
+    <div class="panel-header-right">
+      Active&nbsp;<span id="missionboard-active-count">0</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="missionboard-content"></div>
+  </div>
+</div>
+
+<!-- Market panel -->
+<div id="panel-market" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Planet</button>
+    <div class="panel-header-text">
+      <h2>Market</h2>
+      <div id="market-planet-name" class="landing-meta">—</div>
+    </div>
+    <div class="market-cargo-info">
+      Cargo&nbsp;<span id="market-cargo-used">0</span>&nbsp;/&nbsp;<span id="market-cargo-cap">—</span>
+      &nbsp;&nbsp;Credits&nbsp;<span id="market-credits">—</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="market-table"></div>
+  </div>
+</div>
+
+<!-- Shipyard panel -->
+<div id="panel-shipyard" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Planet</button>
+    <div class="panel-header-text">
+      <h2>Shipyard</h2>
+      <div id="shipyard-planet-name" class="landing-meta">—</div>
+    </div>
+    <div class="panel-header-right">
+      Credits&nbsp;<span id="shipyard-credits">—</span>
+    </div>
+  </div>
+  <div class="panel-body" id="shipyard-body"></div>
+</div>
+
+<!-- Upgrade shop panel -->
+<div id="panel-upgrades" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Planet</button>
+    <div class="panel-header-text">
+      <h2>Upgrade Shop</h2>
+      <div id="upgrades-planet-name" class="landing-meta">—</div>
+    </div>
+    <div class="panel-header-right">
+      Credits&nbsp;<span id="upgrades-credits">—</span>
+      &nbsp;&nbsp;·&nbsp;&nbsp;
+      Slots&nbsp;<span id="upgrades-slots">—</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="upgrades-ship-info"></div>
+    <div id="upgrades-list"></div>
+  </div>
+</div>
+
+<!-- Planet landing panel -->
+<div id="panel-landing" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Leave Planet</button>
+    <div class="panel-header-text">
+      <h2 id="landing-system-name">—</h2>
+      <div id="landing-meta" class="landing-meta">—</div>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="landing-planets"></div>
+  </div>
+</div>
+
+<script src="data/gamedata.js"></script>
+<script src="starmap-generator.js"></script>
+<script src="economy-engine.js"></script>
+<script src="combat-engine.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+
+</body>
+</html>

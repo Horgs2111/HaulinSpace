@@ -1,0 +1,40 @@
+{
+  "planets": [
+    {
+      "id": 1,
+      "name": "Solara Prime",
+      "system_id": 1,
+      "has_market": true,
+      "commodities": ["food","water","electronics"],
+      "shipyard": true,
+      "upgrade_shop": true
+    },
+    {
+      "id": 2,
+      "name": "Dravos Minor",
+      "system_id": 2,
+      "has_market": true,
+      "commodities": ["ore","fuel","machinery"],
+      "shipyard": false,
+      "upgrade_shop": true
+    },
+    {
+      "id": 3,
+      "name": "Kepleron IV",
+      "system_id": 3,
+      "has_market": false,
+      "commodities": [],
+      "shipyard": false,
+      "upgrade_shop": false
+    },
+    {
+      "id": 4,
+      "name": "Zentari Hub",
+      "system_id": 4,
+      "has_market": true,
+      "commodities": ["electronics","medicine","luxuries"],
+      "shipyard": true,
+      "upgrade_shop": true
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "factions":[
+    {"name":"Galactic Traders Guild","type":"trade"},
+    {"name":"Outer Rim Pirates","type":"pirate"},
+    {"name":"Federation Navy","type":"military"},
+    {"name":"Independent Miners","type":"industrial"}
+  ]
+}
