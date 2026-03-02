@@ -21,7 +21,7 @@ const DEFAULT_KEYBINDS = {
   jump:      'j',
   fire:      ' ',
   missile:   'x',
-  boost:     'Shift',
+  boost:     'b',
   info:      'i',
   pause:     'Escape'
 }
@@ -67,8 +67,11 @@ function isKeyHeld(k) {
 // ─── Input ────────────────────────────────────────────────────────────────────
 
 const keys = {}
-document.addEventListener('keydown', e => { keys[e.key] = true;  handleActionKey(e.key) })
-document.addEventListener('keyup',   e => { keys[e.key] = false })
+document.addEventListener('keydown', e => {
+  if (e.key === 'Tab') { e.preventDefault(); if (gameState === 'playing' && !activePanel) cycleNavTarget(); return }
+  keys[e.key] = true; handleActionKey(e.key)
+})
+document.addEventListener('keyup', e => { keys[e.key] = false })
 
 function handleActionKey(key) {
   if (gameState !== 'playing' || jumpState) return
@@ -105,13 +108,13 @@ function handleActionKey(key) {
     galaxyMapOpen ? closeGalaxyMap() : openGalaxyMap()
   }
 
-  // Shift — boost
+  // B — boost (Afterburner extends to 5 s)
   if (matchKey(key, keybinds.boost) && !activePanel && !galaxyMapOpen &&
       !player.landedPlanet && boostTimer <= 0 && boostCooldown <= 0) {
     const fuel = player.fuel ?? player.ship.fuel_capacity
     if (fuel > 0) {
       player.fuel = fuel - 1
-      boostTimer  = BOOST_DURATION
+      boostTimer  = player.upgrades?.includes('Afterburner') ? 5 : BOOST_DURATION
       updateFuelHUD()
     }
   }
@@ -246,7 +249,7 @@ let tutorialStep = null    // 0-4 while active, null when inactive
 const TUTORIAL_STEPS = [
   {
     title: 'Piloting Your Ship',
-    body:  'Use <strong>W / A / S / D</strong> to fly — W thrusts forward, S brakes, A/D rotate.<br>Hold <strong>Shift</strong> for a short speed boost.'
+    body:  'Use <strong>W / A / S / D</strong> to fly — W thrusts forward, S brakes, A/D rotate.<br>Press <strong>B</strong> for a short speed boost.'
   },
   {
     title: 'Landing on Planets',
@@ -313,6 +316,7 @@ let priceHistory         = new Map()        // 'planetId:commodityId' → [last 
 let missionCompleteQueue = []               // missions awaiting collect-reward popup
 let boostTimer           = 0               // seconds remaining on active boost
 let boostCooldown        = 0               // seconds until boost is available again
+let navCombatTarget      = null            // explicitly TAB-locked enemy
 
 // ── Phase 19 — Faction reputation + statistics ────────────────────────────────
 let playerStats = {
@@ -349,17 +353,17 @@ function getJumpReadyStatus() {
 }
 
 function updateJumpHUD() {
-  const el = document.getElementById('hud-jump')
+  const el = document.getElementById('sp-nav-jump')
   if (!el) return
-  if (!jumpTarget || !galaxy) { el.innerHTML = ''; el.className = 'hud-jump'; return }
+  if (!jumpTarget || !galaxy) { el.textContent = 'No jump target'; el.className = 'sp-nav-line sp-nav-dim'; return }
   const name   = galaxy.systems[jumpTarget].name
   const status = getJumpReadyStatus()
   if (status.ready) {
-    el.innerHTML = `JUMP READY <span>→ ${name}</span>`
-    el.className = 'hud-jump hud-jump-ready'
+    el.textContent = `JUMP READY → ${name}`
+    el.className   = 'sp-nav-line sp-nav-jump-ready'
   } else {
-    el.innerHTML = `<span class="hud-jump-arrow">→</span> ${name}`
-    el.className = 'hud-jump hud-jump-set'
+    el.textContent = `→ ${name}`
+    el.className   = 'sp-nav-line sp-nav-jump-set'
   }
 }
 
@@ -502,10 +506,19 @@ const G_SCALE = 0.15  // global gravity strength scale
 function updatePhysics(dt) {
   if (dt === 0 || activePanel || player.landedPlanet || galaxyMapOpen || paused) return
 
-  // Boost timers
+  // Boost timers (Afterburner: auto-re-trigger while B is held)
   if (boostTimer > 0) {
     boostTimer -= dt
-    if (boostTimer <= 0) { boostTimer = 0; boostCooldown = BOOST_COOLDOWN }
+    if (boostTimer <= 0) {
+      const holdingBoost = isKeyHeld(keybinds.boost) && !activePanel && !galaxyMapOpen && !player.landedPlanet
+      if (player.upgrades?.includes('Afterburner') && holdingBoost && (player.fuel ?? 0) > 0) {
+        player.fuel = Math.max(0, (player.fuel ?? 0) - 1)
+        boostTimer  = 5
+        updateFuelHUD()
+      } else {
+        boostTimer = 0; boostCooldown = BOOST_COOLDOWN
+      }
+    }
   } else if (boostCooldown > 0) {
     boostCooldown = Math.max(0, boostCooldown - dt)
   }
@@ -709,38 +722,7 @@ function drawShip(wx, wy, angle) {
 }
 
 function drawSystemHUD() {
-  const speed = Math.hypot(player.vx, player.vy)
-  const hdg   = (((player.angle * 180 / Math.PI) % 360) + 360) % 360
-
-  ctx.save()
-  ctx.font = '11px Arial'; ctx.fillStyle = 'rgba(65,105,165,0.75)'; ctx.textAlign = 'left'
-  ctx.fillText(`SPD  ${Math.round(speed).toString().padStart(3)}`,  18, canvas.height - 28)
-  ctx.fillText(`HDG  ${Math.round(hdg).toString().padStart(3)}°`,   18, canvas.height - 14)
-  // Gravity indicator — show when gravity is meaningful
-  const gravMag = player._gravMag ?? 0
-  if (gravMag > 0.5) {
-    const gAlpha = Math.min(0.75, 0.2 + gravMag * 0.04)
-    ctx.fillStyle = `rgba(100,155,220,${gAlpha})`
-    ctx.fillText(`GRAV ${Math.round(gravMag).toString().padStart(3)}`, 18, canvas.height - 42)
-  }
-  ctx.restore()
-
-  // Boost indicator
-  ctx.save()
-  ctx.font = '11px Arial'; ctx.textAlign = 'left'
-  if (boostTimer > 0) {
-    const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 1000 * 8)
-    ctx.fillStyle = `rgba(255,160,40,${pulse})`
-    ctx.shadowColor = 'rgba(255,120,20,0.6)'; ctx.shadowBlur = 8
-    ctx.fillText(`BOOST  ${boostTimer.toFixed(1)}s`, 18, canvas.height - 48)
-  } else if (boostCooldown > 0) {
-    ctx.fillStyle = 'rgba(100,80,50,0.70)'
-    ctx.fillText(`BOOST  ${boostCooldown.toFixed(1)}s`, 18, canvas.height - 48)
-  } else {
-    ctx.fillStyle = 'rgba(65,105,165,0.55)'
-    ctx.fillText('BOOST  [Shift]', 18, canvas.height - 48)
-  }
-  ctx.restore()
+  updateSidePanel()
 
   // Landing prompt (pulsing)
   if (nearPlanet && !activePanel) {
@@ -778,33 +760,41 @@ function drawSystemHUD() {
 // ─── Minimap ──────────────────────────────────────────────────────────────────
 
 function drawMinimap() {
-  if (!systemLayout || gameState !== 'playing' || activePanel || jumpState || paused) return
-  const cx    = 85
-  const cy    = 44 + 85   // below the 44px HUD strip
-  const R     = 65
-  const RANGE = 600
+  if (!systemLayout || gameState !== 'playing' || jumpState) return
+  const mmCanvas = document.getElementById('minimap-canvas')
+  if (!mmCanvas) return
+  const mc    = mmCanvas.getContext('2d')
+  const cw    = mmCanvas.width
+  const ch    = mmCanvas.height
+  const cx    = cw / 2
+  const cy    = ch / 2
+  const R     = Math.min(cw, ch) / 2 - 5
+  const RANGE = 2500
   const scale = R / RANGE
 
-  ctx.save()
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(0,4,18,0.72)'; ctx.fill()
-  ctx.strokeStyle = 'rgba(40,80,160,0.50)'; ctx.lineWidth = 1.5; ctx.stroke()
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip()
+  // Fill entire canvas so sections below get no bleed-through
+  mc.fillStyle = 'rgba(2,6,20,0.94)'
+  mc.fillRect(0, 0, cw, ch)
+  mc.save()
+  mc.beginPath(); mc.arc(cx, cy, R, 0, Math.PI * 2)
+  mc.fillStyle = 'rgba(0,4,18,0.90)'; mc.fill()
+  mc.strokeStyle = 'rgba(40,80,160,0.45)'; mc.lineWidth = 1.5; mc.stroke()
+  mc.beginPath(); mc.arc(cx, cy, R, 0, Math.PI * 2); mc.clip()
 
   // Planets
   for (const p of systemLayout.planets) {
     const rx = (p.sx - player.x) * scale
     const ry = (p.sy - player.y) * scale
-    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 4, 0, Math.PI * 2)
-    ctx.fillStyle = p === autopilot ? '#88ccff' : '#4488cc'
-    ctx.fill()
+    mc.beginPath(); mc.arc(cx + rx, cy + ry, 4, 0, Math.PI * 2)
+    mc.fillStyle = p === autopilot ? '#88ccff' : '#4488cc'
+    mc.fill()
     if (p === autopilot) {
-      ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 7, 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(100,220,140,0.75)'; ctx.lineWidth = 1; ctx.stroke()
+      mc.beginPath(); mc.arc(cx + rx, cy + ry, 7, 0, Math.PI * 2)
+      mc.strokeStyle = 'rgba(100,220,140,0.75)'; mc.lineWidth = 1; mc.stroke()
     }
   }
 
-  // NPC traders (docked in current system)
+  // NPC traders docked in current system
   for (const t of npcTraders) {
     if (t.system !== player.system || t.state !== 'docked') continue
     const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
@@ -814,44 +804,46 @@ function drawMinimap() {
     const ty = lp.sy + Math.sin(t.orbitAngle) * r
     const rx = (tx - player.x) * scale
     const ry = (ty - player.y) * scale
-    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
-    ctx.fillStyle = '#3ec8b8'; ctx.fill()
+    mc.beginPath(); mc.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
+    mc.fillStyle = '#3ec8b8'; mc.fill()
   }
 
   // Loot
   for (const l of lootItems) {
     const rx = (l.x - player.x) * scale
     const ry = (l.y - player.y) * scale
-    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
-    ctx.fillStyle = '#ffdd44'; ctx.fill()
+    mc.beginPath(); mc.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
+    mc.fillStyle = '#ffdd44'; mc.fill()
   }
 
-  // Enemies
+  // Enemies — clamp out-of-range dots to circle edge; highlight locked target
   for (const en of enemies) {
-    const rx = (en.x - player.x) * scale
-    const ry = (en.y - player.y) * scale
-    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 2.5, 0, Math.PI * 2)
-    ctx.fillStyle = '#ff4444'; ctx.fill()
+    const dx = (en.x - player.x) * scale
+    const dy = (en.y - player.y) * scale
+    const d  = Math.hypot(dx, dy)
+    const edgeR = R - 3
+    let bx, by
+    if (d > edgeR) {
+      bx = cx + (dx / d) * edgeR
+      by = cy + (dy / d) * edgeR
+    } else {
+      bx = cx + dx
+      by = cy + dy
+    }
+    const isLocked = en === navCombatTarget
+    mc.beginPath(); mc.arc(bx, by, isLocked ? 3.5 : 2.5, 0, Math.PI * 2)
+    mc.fillStyle = isLocked ? '#ff8800' : '#ff4444'; mc.fill()
   }
 
   // Player direction line + dot
-  ctx.beginPath()
-  ctx.moveTo(cx, cy)
-  ctx.lineTo(cx + Math.cos(player.angle) * 9, cy + Math.sin(player.angle) * 9)
-  ctx.strokeStyle = '#aaddff'; ctx.lineWidth = 1.5; ctx.stroke()
-  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2)
-  ctx.fillStyle = '#ffffff'; ctx.fill()
+  mc.beginPath()
+  mc.moveTo(cx, cy)
+  mc.lineTo(cx + Math.cos(player.angle) * 9, cy + Math.sin(player.angle) * 9)
+  mc.strokeStyle = '#aaddff'; mc.lineWidth = 1.5; mc.stroke()
+  mc.beginPath(); mc.arc(cx, cy, 3, 0, Math.PI * 2)
+  mc.fillStyle = '#ffffff'; mc.fill()
 
-  ctx.restore()
-
-  // Autopilot label below the minimap circle
-  if (autopilot) {
-    ctx.save()
-    ctx.font = '9px Arial'; ctx.fillStyle = 'rgba(100,220,140,0.70)'
-    ctx.textAlign = 'center'
-    ctx.fillText('AUTOPILOT \u00b7 ' + autopilot.name, cx, cy + R + 12)
-    ctx.restore()
-  }
+  mc.restore()
 }
 
 // ─── Jump animation draw ──────────────────────────────────────────────────────
@@ -1356,6 +1348,7 @@ let enemies        = []
 let projectiles    = []
 let lootItems      = []
 let playerFireTimer = 0
+let protonFireTimer = 0
 
 const WEAPON_RANGE        = 220  // world units — enemy engages at this distance
 const PROJ_SPEED          = 550  // world units/s
@@ -1369,6 +1362,37 @@ const MISSILE_TURN        = 2.8  // radians/second homing rate
 const MISSILE_DAMAGE      = 70   // base damage per hit
 const MISSILE_HIT_RADIUS  = 20   // larger hit radius than bolts
 
+// Priority order for auto-selecting ammo when X is pressed
+const AMMO_PRIORITY = [
+  'homing_missile', 'standard_missile',
+  'javelin', 'standard_rocket', 'cluster_rocket', 'heavy_rocket',
+  'emp_round', 'nova_round'
+]
+
+// Which launcher upgrade provides each ammo type
+const AMMO_LAUNCHER = {
+  homing_missile:   'Missile Launcher',
+  standard_missile: 'Missile Launcher',
+  javelin:          'Rocket Launcher',
+  standard_rocket:  'Rocket Launcher',
+  cluster_rocket:   'Rocket Launcher',
+  heavy_rocket:     'Rocket Launcher',
+  emp_round:        'Special Weapon Launcher',
+  nova_round:       'Special Weapon Launcher'
+}
+
+// Ammo display names for HUD
+const AMMO_LABEL = {
+  homing_missile:   'Homing Msls',
+  standard_missile: 'Std Msls',
+  javelin:          'Jav Rockets',
+  standard_rocket:  'Std Rockets',
+  cluster_rocket:   'Clstr Rockets',
+  heavy_rocket:     'Hvy Rockets',
+  emp_round:        'EMP Rounds',
+  nova_round:       'Nova Rounds'
+}
+
 function getBoltStyle(wslots) {
   if (wslots >= 4) return 'bolt_heavy'
   if (wslots >= 2) return 'bolt_medium'
@@ -1381,6 +1405,7 @@ function clearCombat() {
   lootItems       = []
   particles       = []
   playerFireTimer = 0
+  protonFireTimer = 0
   AudioEngine.stopThrust()
   wasThrusting    = false
 }
@@ -1396,7 +1421,9 @@ function spawnBountyTargets(sys) {
     const sd = 600 + Math.random() * 150
     enemies.push({
       ship,
-      hp:             Math.round(ship.hull * 1.4),  // bounty target is tougher
+      hp:          Math.round(ship.hull * 1.4),  // bounty target is tougher
+      shield:      ship.shield ?? 0,
+      shieldDelay: 0,
       x:              player.x + Math.cos(sa) * sd,
       y:              player.y + Math.sin(sa) * sd,
       angle:          sa + Math.PI,
@@ -1428,7 +1455,9 @@ function spawnPirates(sys) {
     const sd    = 580 + Math.random() * 200
     enemies.push({
       ship,
-      hp:        ship.hull,
+      hp:          ship.hull,
+      shield:      ship.shield ?? 0,
+      shieldDelay: 0,
       x:         player.x + Math.cos(sa) * sd,
       y:         player.y + Math.sin(sa) * sd,
       angle:     sa + Math.PI,
@@ -1438,65 +1467,148 @@ function spawnPirates(sys) {
   }
 }
 
+// Returns raw (pre-random) damage for a projectile style
+function calcProjectileDamage(p) {
+  if (p.baseDmg != null) return Math.random() * 15 + p.baseDmg
+  if (p.style === 'bolt_proton')   return Math.random() * 20 + 84
+  if (p.style === 'missile' || p.style === 'missile_straight') return Math.random() * 20 + MISSILE_DAMAGE
+  const base = p.style === 'bolt_heavy' ? 42 : p.style === 'bolt_medium' ? 22 : 14
+  return Math.random() * 10 + base
+}
+
+// Pick first ammo type that has ammo and a matching launcher in weaponSlots
+function getSelectedAmmo() {
+  const inv   = player.ammoInventory ?? {}
+  const slots = player.weaponSlots   ?? []
+  for (const type of AMMO_PRIORITY) {
+    const launcher = AMMO_LAUNCHER[type]
+    if (!slots.includes(launcher)) continue
+    if ((inv[type] ?? 0) > 0) return type
+  }
+  return null
+}
+
 function firePlayerWeapon() {
-  if (playerFireTimer > 0 || player.landedPlanet || activePanel || jumpState || galaxyMapOpen) return
-  const wslots = player.ship.weapon_slots
-  const style  = getBoltStyle(wslots)
-  playerFireTimer = 0.5 / wslots
+  if (player.landedPlanet || activePanel || jumpState || galaxyMapOpen) return
+  const slots   = player.weaponSlots ?? []
+  const lasers  = slots.filter(w => w === 'Laser Cannon').length
+  const protons = slots.filter(w => w === 'Proton Cannon').length
+  if (lasers === 0 && protons === 0) return
 
-  const angle  = player.angle
-  const cos    = Math.cos(angle)
-  const sin    = Math.sin(angle)
-  const baseX  = player.x + cos * 16
-  const baseY  = player.y + sin * 16
-  const bvx    = player.vx + cos * PROJ_SPEED
-  const bvy    = player.vy + sin * PROJ_SPEED
+  const damageMult = player.upgrades?.includes('Targeting Computer') ? 1.10 : 1.0
+  const angle = player.angle
+  const cos   = Math.cos(angle), sin = Math.sin(angle)
+  const baseX = player.x + cos * 16
+  const baseY = player.y + sin * 16
 
-  if (style === 'bolt_medium') {
-    // Twin shot — two bolts offset ±5px perpendicular to firing direction
-    const offset = 5
-    for (const side of [-1, 1]) {
-      projectiles.push({
-        x: baseX + (-sin) * offset * side,
-        y: baseY + cos    * offset * side,
-        vx: bvx, vy: bvy,
-        owner: 'player', timer: PROJ_LIFETIME,
-        style, angle
-      })
+  // Fire laser cannons
+  if (lasers > 0 && playerFireTimer <= 0) {
+    const style = getBoltStyle(lasers)
+    const bvx = player.vx + cos * PROJ_SPEED
+    const bvy = player.vy + sin * PROJ_SPEED
+    if (style === 'bolt_medium') {
+      for (const side of [-1, 1]) {
+        projectiles.push({
+          x: baseX + (-sin) * 5 * side, y: baseY + cos * 5 * side,
+          vx: bvx, vy: bvy,
+          owner: 'player', timer: PROJ_LIFETIME, style, angle, damageMult
+        })
+      }
+    } else {
+      projectiles.push({ x: baseX, y: baseY, vx: bvx, vy: bvy,
+        owner: 'player', timer: PROJ_LIFETIME, style, angle, damageMult })
     }
-  } else {
-    projectiles.push({
-      x: baseX, y: baseY, vx: bvx, vy: bvy,
-      owner: 'player', timer: PROJ_LIFETIME,
-      style, angle
-    })
+    playerFireTimer = 0.5 / lasers
+    spawnParticles(baseX, baseY, player.vx, player.vy, 'muzzle', style === 'bolt_heavy' ? 7 : 4)
+    AudioEngine.fire()
   }
 
-  spawnParticles(baseX, baseY, player.vx, player.vy, 'muzzle', style === 'bolt_heavy' ? 7 : 4)
-  AudioEngine.fire()
+  // Fire proton cannons
+  if (protons > 0 && protonFireTimer <= 0) {
+    const bvx = player.vx + cos * PROJ_SPEED * 0.75
+    const bvy = player.vy + sin * PROJ_SPEED * 0.75
+    for (let i = 0; i < protons; i++) {
+      const off = protons > 1 ? (i - (protons - 1) / 2) * 9 : 0
+      projectiles.push({
+        x: baseX + (-sin) * off, y: baseY + cos * off,
+        vx: bvx, vy: bvy,
+        owner: 'player', timer: PROJ_LIFETIME * 1.5, style: 'bolt_proton', angle, damageMult
+      })
+    }
+    protonFireTimer = 1.5
+    spawnParticles(baseX, baseY, player.vx, player.vy, 'muzzle', 10)
+    AudioEngine.fire()
+  }
 }
 
 function fireMissile() {
   if (!player || player.landedPlanet || activePanel || jumpState || galaxyMapOpen) return
-  if ((player.missileAmmo ?? 0) <= 0) {
-    missionNotify = { text: 'No missiles — reload at a planet', timer: 2.0, success: false }
+  const ammoType = getSelectedAmmo()
+  if (!ammoType) {
+    missionNotify = { text: 'No ammo — buy at upgrade shops', timer: 2.0, success: false }
     return
   }
-  player.missileAmmo--
+  player.ammoInventory[ammoType] = Math.max(0, (player.ammoInventory[ammoType] ?? 0) - 1)
   updateMissileHUD()
 
   const angle = player.angle
+  const cos   = Math.cos(angle), sin = Math.sin(angle)
+
+  // Per-ammo-type stats
+  const AMMO_STATS = {
+    homing_missile:   { style: 'missile',          speed: MISSILE_SPEED,        baseDmg: 70,  lifetime: MISSILE_LIFETIME, hitRadius: MISSILE_HIT_RADIUS      },
+    standard_missile: { style: 'missile_straight',  speed: MISSILE_SPEED * 1.3,  baseDmg: 55,  lifetime: MISSILE_LIFETIME * 0.7, hitRadius: MISSILE_HIT_RADIUS },
+    javelin:          { style: 'javelin',            speed: MISSILE_SPEED * 1.4,  baseDmg: 50,  lifetime: 2.5, hitRadius: MISSILE_HIT_RADIUS                   },
+    standard_rocket:  { style: 'rocket',             speed: MISSILE_SPEED * 0.9,  baseDmg: 65,  lifetime: 3.0, hitRadius: MISSILE_HIT_RADIUS                   },
+    cluster_rocket:   { style: 'cluster_rocket',     speed: MISSILE_SPEED * 0.8,  baseDmg: 45,  lifetime: 2.0, hitRadius: MISSILE_HIT_RADIUS                   },
+    heavy_rocket:     { style: 'heavy_rocket',       speed: MISSILE_SPEED * 0.6,  baseDmg: 120, lifetime: 3.5, hitRadius: MISSILE_HIT_RADIUS * 1.5              },
+    emp_round:        { style: 'emp_round',          speed: MISSILE_SPEED,        baseDmg: 25,  lifetime: 4.0, hitRadius: MISSILE_HIT_RADIUS * 1.5              },
+    nova_round:       { style: 'nova_round',         speed: MISSILE_SPEED * 0.7,  baseDmg: 150, lifetime: 5.0, hitRadius: MISSILE_HIT_RADIUS * 2                }
+  }
+
+  const s = AMMO_STATS[ammoType]
   projectiles.push({
-    x:     player.x + Math.cos(angle) * 22,
-    y:     player.y + Math.sin(angle) * 22,
-    vx:    player.vx + Math.cos(angle) * MISSILE_SPEED,
-    vy:    player.vy + Math.sin(angle) * MISSILE_SPEED,
-    owner: 'player',
-    timer: MISSILE_LIFETIME,
-    style: 'missile',
-    angle
+    x:     player.x + cos * 22,
+    y:     player.y + sin * 22,
+    vx:    player.vx + cos * s.speed,
+    vy:    player.vy + sin * s.speed,
+    owner: 'player', timer: s.lifetime, style: s.style, angle,
+    baseDmg: s.baseDmg, hitRadius: s.hitRadius
   })
   AudioEngine.fire()
+}
+
+function updateShields(dt) {
+  // Player shield regen — 5 s delay after last hit
+  if (player.shieldDelay > 0) {
+    player.shieldDelay = Math.max(0, player.shieldDelay - dt)
+  } else {
+    const max = player.ship.shield ?? 0
+    if (player.shield < max)
+      player.shield = Math.min(max, player.shield + (player.ship.shield_regen ?? 0) * dt)
+  }
+  // Ramscoop: passive fuel regen ~1 fuel per ~8 minutes while flying
+  if (player.upgrades?.includes('Ramscoop') && !player.landedPlanet && !activePanel) {
+    player.ramscoopFrac = (player.ramscoopFrac ?? 0) + 0.002 * dt
+    if (player.ramscoopFrac >= 1.0) {
+      player.ramscoopFrac -= 1.0
+      const cap = player.ship.fuel_capacity
+      if ((player.fuel ?? cap) < cap) {
+        player.fuel = Math.min((player.fuel ?? cap) + 1, cap)
+        updateFuelHUD()
+      }
+    }
+  }
+  // Enemy shield regen
+  for (const en of enemies) {
+    if (en.shieldDelay > 0) {
+      en.shieldDelay = Math.max(0, en.shieldDelay - dt)
+    } else {
+      const max = en.ship.shield ?? 0
+      if (en.shield < max)
+        en.shield = Math.min(max, en.shield + (en.ship.shield_regen ?? 0) * dt)
+    }
+  }
 }
 
 function updateEnemies(dt) {
@@ -1552,7 +1664,7 @@ function updateProjectiles(dt) {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const p = projectiles[i]
 
-    // Missile homing — steer toward nearest enemy before moving
+    // Homing — steer toward nearest enemy (homing_missile only, not straight variants)
     if (p.style === 'missile' && p.owner === 'player' && enemies.length > 0) {
       let nearest = null, bestDist = Infinity
       for (const e of enemies) {
@@ -1578,28 +1690,32 @@ function updateProjectiles(dt) {
     p.timer -= dt
     if (p.timer <= 0) { projectiles.splice(i, 1); continue }
 
-    const hitRadius = p.style === 'missile' ? MISSILE_HIT_RADIUS : PROJ_HIT_RADIUS
+    const isMissileStyle = p.style === 'missile' || p.style === 'missile_straight' ||
+      p.style === 'javelin' || p.style === 'rocket' || p.style === 'cluster_rocket' ||
+      p.style === 'heavy_rocket' || p.style === 'emp_round' || p.style === 'nova_round'
+    const hitRadius = p.hitRadius ?? (isMissileStyle ? MISSILE_HIT_RADIUS : PROJ_HIT_RADIUS)
 
     let hit = false
     if (p.owner === 'player') {
       for (let j = enemies.length - 1; j >= 0; j--) {
         if (Math.hypot(p.x - enemies[j].x, p.y - enemies[j].y) < hitRadius) {
-          const dmg = p.style === 'missile'
-            ? Math.round(Math.random() * 20 + MISSILE_DAMAGE)
-            : Math.round(Math.random() * 10 + (p.style === 'bolt_heavy' ? 42 : p.style === 'bolt_medium' ? 22 : 14))
-          enemies[j].hp -= dmg
-          spawnParticles(p.x, p.y, p.vx, p.vy, p.style === 'missile' ? 'explosion' : 'hit', p.style === 'missile' ? 18 : 6)
+          const dmg = Math.round(calcProjectileDamage(p) * (p.damageMult ?? 1.0))
+          const en = enemies[j]
+          const enAbsorbed = Math.min(en.shield ?? 0, dmg)
+          en.shield = Math.max(0, (en.shield ?? 0) - dmg)
+          en.hp -= (dmg - enAbsorbed)
+          en.shieldDelay = 5.0
+          spawnParticles(p.x, p.y, p.vx, p.vy, isMissileStyle ? 'explosion' : 'hit', isMissileStyle ? 18 : 6)
           AudioEngine.hit()
-          if (enemies[j].hp <= 0) {
-            const e = enemies[j]
-            spawnParticles(e.x, e.y, e.vx, e.vy, 'explosion', 28)
+          if (en.hp <= 0) {
+            spawnParticles(en.x, en.y, en.vx, en.vy, 'explosion', 28)
             AudioEngine.explosion()
             playerStats.enemiesDestroyed++
             // Pirate kills: lose pirate rep, gain navy rep
             adjustRep('Outer Rim Pirates', -3)
             adjustRep('Federation Navy', 2)
-            if (e.bountyMissionId && player.missions) {
-              const bm = player.missions.find(m => m.id === e.bountyMissionId)
+            if (en.bountyMissionId && player.missions) {
+              const bm = player.missions.find(m => m.id === en.bountyMissionId)
               if (bm) {
                 player.credits += bm.reward
                 playerStats.creditsEarned += bm.reward
@@ -1612,7 +1728,7 @@ function updateProjectiles(dt) {
                 updateHUD()
               }
             }
-            spawnLoot(e); enemies.splice(j, 1)
+            spawnLoot(en); enemies.splice(j, 1)
           }
           hit = true; break
         }
@@ -1620,8 +1736,19 @@ function updateProjectiles(dt) {
     } else {
       if (Math.hypot(p.x - player.x, p.y - player.y) < hitRadius) {
         const diffMult = DIFF_SETTINGS[player.difficulty ?? 'normal'].damageMult
-        const eDmg = p.style === 'bolt_heavy' ? 42 : p.style === 'bolt_medium' ? 22 : 14
-        player.hp = Math.max(0, player.hp - Math.round((Math.random() * 10 + eDmg) * diffMult))
+        const eDmg    = p.style === 'bolt_heavy' ? 42 : p.style === 'bolt_medium' ? 22 : 14
+        let   remain  = Math.round((Math.random() * 10 + eDmg) * diffMult)
+        // Shield → Armour → Hull
+        const shieldAbsorb = Math.min(player.shield, remain)
+        player.shield = Math.max(0, player.shield - remain)
+        player.shieldDelay = 5.0
+        remain -= shieldAbsorb
+        if (remain > 0 && (player.armour ?? 0) > 0) {
+          const armourAbsorb = Math.min(player.armour, remain)
+          player.armour = Math.max(0, player.armour - remain)
+          remain -= armourAbsorb
+        }
+        if (remain > 0) player.hp = Math.max(0, player.hp - remain)
         spawnParticles(p.x, p.y, p.vx, p.vy, 'hit', 5)
         AudioEngine.hit()
         hit = true
@@ -1706,18 +1833,35 @@ function drawProjectiles() {
 
     const ip = p.owner === 'player'
 
-    if (p.style === 'missile') {
-      // Elongated body
-      ctx.shadowColor = '#ff9933'; ctx.shadowBlur = 14
-      ctx.fillStyle   = '#ffcc44'
+    if (p.style === 'missile' || p.style === 'missile_straight' ||
+        p.style === 'javelin' || p.style === 'rocket' ||
+        p.style === 'cluster_rocket' || p.style === 'heavy_rocket' ||
+        p.style === 'emp_round' || p.style === 'nova_round') {
+      // Color by type
+      let bodyColor = '#ffcc44', noseColor = '#ffffff', tailColor = '#cc8800', glowColor = '#ff9933'
+      if      (p.style === 'missile_straight') { bodyColor = '#aaffcc'; noseColor = '#ffffff'; glowColor = '#44dd88' }
+      else if (p.style === 'javelin')     { bodyColor = '#88ccff'; noseColor = '#ffffff'; glowColor = '#2288ff' }
+      else if (p.style === 'rocket')      { bodyColor = '#ffaa44'; glowColor = '#ff6600' }
+      else if (p.style === 'cluster_rocket') { bodyColor = '#ffdd44'; glowColor = '#ffaa00' }
+      else if (p.style === 'heavy_rocket') { bodyColor = '#ff5533'; glowColor = '#ff2200' }
+      else if (p.style === 'emp_round')   { bodyColor = '#44ffff'; glowColor = '#00cccc' }
+      else if (p.style === 'nova_round')  { bodyColor = '#ff66ff'; glowColor = '#cc00cc' }
+      ctx.shadowColor = glowColor; ctx.shadowBlur = 14
+      ctx.fillStyle   = bodyColor
       ctx.beginPath(); ctx.ellipse(0, 0, 11, 3.5, 0, 0, Math.PI * 2); ctx.fill()
-      // Bright nose
+      ctx.shadowBlur  = 0
+      ctx.fillStyle   = noseColor
+      ctx.beginPath(); ctx.ellipse(9, 0, 4, 2, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = tailColor
+      ctx.fillRect(-11, -4, 5, 8)
+
+    } else if (p.style === 'bolt_proton') {
+      ctx.shadowColor = '#aa44ff'; ctx.shadowBlur = 26
+      ctx.fillStyle   = '#cc88ff'
+      ctx.fillRect(-14, -5, 24, 10)
       ctx.shadowBlur  = 0
       ctx.fillStyle   = '#ffffff'
-      ctx.beginPath(); ctx.ellipse(9, 0, 4, 2, 0, 0, Math.PI * 2); ctx.fill()
-      // Tail fin hint
-      ctx.fillStyle = '#cc8800'
-      ctx.fillRect(-11, -4, 5, 8)
+      ctx.fillRect(-10, -2.5, 18, 5)
 
     } else if (p.style === 'bolt_light') {
       ctx.shadowColor = ip ? '#66ccff' : '#ff5533'
@@ -1780,22 +1924,6 @@ function drawHPBar(x, y, w, label, hp, maxHp, color) {
 }
 
 function drawCombatHUD() {
-  if (!enemies.length && !lootItems.length) return
-
-  if (enemies.length > 0) {
-    drawHPBar(18, 120, 180, `HULL  ${Math.max(0, Math.round(player.hp))}`, player.hp, player.ship.hull, '#44cc88')
-
-    let nearest = null, nearestD = Infinity
-    for (const e of enemies) {
-      const d = Math.hypot(player.x - e.x, player.y - e.y)
-      if (d < nearestD) { nearestD = d; nearest = e }
-    }
-    if (nearest) {
-      const enemyLabel = nearest.name || nearest.ship.name
-      drawHPBar(18, 144, 180, `${enemyLabel}  ${Math.max(0, Math.round(nearest.hp))}`, nearest.hp, nearest.ship.hull, '#cc4444')
-    }
-  }
-
   // "Fly over loot" hint when close to pickup
   for (const l of lootItems) {
     if (Math.hypot(player.x - l.x, player.y - l.y) < 200) {
@@ -1803,7 +1931,7 @@ function drawCombatHUD() {
       ctx.save()
       ctx.font = 'bold 12px Arial'; ctx.fillStyle = `rgba(220,185,50,${pulse})`
       ctx.textAlign = 'center'; ctx.shadowColor = 'rgba(200,155,20,0.45)'; ctx.shadowBlur = 6
-      ctx.fillText('Fly over loot to collect', canvas.width / 2, 74)
+      ctx.fillText('Fly over loot to collect', canvas.width / 2, 40)
       ctx.restore()
       break
     }
@@ -2325,12 +2453,18 @@ function initGame(difficulty = 'normal') {
     cargoPrices:  {},
     missionCargo: {},
     hp:           GAME_SHIPS[0].hull,
+    shield:       GAME_SHIPS[0].shield,
+    shieldDelay:  0,
+    armour:       0,
+    armourMax:    0,
     fuel:         GAME_SHIPS[0].fuel_capacity,
     upgrades:     [],
+    weaponSlots:  Array.from({ length: GAME_SHIPS[0].weapon_slots }, () => 'Laser Cannon'),
+    ammoInventory: {},
+    ramscoopFrac:  0,
     missions:     [],
     factionRep:   Object.fromEntries(GAME_FACTIONS.map(f => [f.name, 0])),
     difficulty,
-    missileAmmo:  0,
     x:            startX,
     y:            startY,
     angle:        Math.PI,
@@ -2441,48 +2575,169 @@ function travel(targetId) {
 }
 
 function updateHUD() {
-  document.getElementById('hud-ship').innerText     = player.ship.name
-  document.getElementById('hud-location').innerText = galaxy.systems[player.system].name
-  document.getElementById('hud-credits').innerText  = player.credits.toLocaleString()
+  const el = id => document.getElementById(id)
+  if (el('sp-ship-name')) el('sp-ship-name').innerText = player.ship.name
+  if (el('sp-system'))    el('sp-system').innerText    = galaxy.systems[player.system].name
+  if (el('sp-credits'))   el('sp-credits').innerText   = player.credits.toLocaleString()
   const cargoUsed = Object.values(player.cargo).reduce((s, n) => s + n, 0)
-  document.getElementById('hud-cargo').innerText    = cargoUsed + ' / ' + player.ship.cargo
+  if (el('sp-cargo'))     el('sp-cargo').innerText     = cargoUsed + ' / ' + player.ship.cargo
   updateFuelHUD()
   updateMissileHUD()
 }
 
 function updateFuelHUD() {
-  const bar      = document.getElementById('hud-fuel-bar')
-  const text     = document.getElementById('hud-fuel-text')
-  if (!bar || !text || !player) return
-  const fuel     = player.fuel ?? player.ship.fuel_capacity
-  const cap      = player.ship.fuel_capacity
-  bar.innerHTML  = ''
-  for (let i = 0; i < cap; i++) {
-    const frag = document.createElement('span')
-    const filled = i < fuel
-    if (filled && fuel === 1) {
-      frag.className = 'fuel-frag fuel-frag-warn'
-    } else {
-      frag.className = filled ? 'fuel-frag fuel-frag-full' : 'fuel-frag'
-    }
-    bar.appendChild(frag)
+  const fill = document.getElementById('sp-fuel-bar')
+  if (!fill || !player) return
+  const fuel = player.fuel ?? player.ship.fuel_capacity
+  const cap  = player.ship.fuel_capacity
+  const pct  = cap > 0 ? fuel / cap : 0
+  fill.style.width = (pct * 100).toFixed(1) + '%'
+  fill.className = 'sp-bar-fill sp-fuel' +
+    (pct <= 0.10 ? ' sp-crit' : pct <= 0.25 ? ' sp-warn' : '')
+}
+
+function updateBoostHUD() {
+  const fill = document.getElementById('sp-boost-bar')
+  if (!fill) return
+  if (boostTimer > 0) {
+    fill.style.width = (boostTimer / BOOST_DURATION * 100).toFixed(1) + '%'
+    fill.className = 'sp-bar-fill boost-fill-active'
+  } else if (boostCooldown > 0) {
+    fill.style.width = ((BOOST_COOLDOWN - boostCooldown) / BOOST_COOLDOWN * 100).toFixed(1) + '%'
+    fill.className = 'sp-bar-fill boost-fill-cooldown'
+  } else {
+    fill.style.width = '100%'
+    fill.className = 'sp-bar-fill boost-fill-ready'
   }
-  text.innerText = fuel + ' / ' + cap
-  text.className = fuel === 0 ? 'hud-fuel-text hud-fuel-empty' : 'hud-fuel-text'
+}
+
+function cycleNavTarget() {
+  if (!enemies.length) { navCombatTarget = null; return }
+  // Clear dead reference
+  if (navCombatTarget && !enemies.includes(navCombatTarget)) navCombatTarget = null
+  if (!navCombatTarget) {
+    navCombatTarget = enemies[0]
+  } else {
+    const idx = enemies.indexOf(navCombatTarget)
+    navCombatTarget = idx >= enemies.length - 1 ? null : enemies[idx + 1]
+  }
+}
+
+function updateSidePanel() {
+  if (!player || gameState !== 'playing') return
+
+  // Speed + heading
+  const speed = Math.hypot(player.vx, player.vy)
+  const hdg   = (((player.angle * 180 / Math.PI) % 360) + 360) % 360
+  const elSpeed = document.getElementById('sp-speed')
+  const elHdg   = document.getElementById('sp-hdg')
+  if (elSpeed) elSpeed.innerText = Math.round(speed)
+  if (elHdg)   elHdg.innerText   = Math.round(hdg) + '°'
+
+  // Gravity
+  const gravMag = player._gravMag ?? 0
+  const gravRow = document.getElementById('sp-grav-row')
+  const elGrav  = document.getElementById('sp-grav')
+  if (gravRow) gravRow.style.display = gravMag > 0.5 ? '' : 'none'
+  if (elGrav && gravMag > 0.5) elGrav.innerText = Math.round(gravMag)
+
+  // Shield bar
+  const shieldMax = player.ship.shield ?? 0
+  const shieldPct = shieldMax > 0 ? Math.max(0, player.shield / shieldMax) : 0
+  const shieldBar = document.getElementById('sp-shield-bar')
+  if (shieldBar) {
+    shieldBar.style.width = (shieldPct * 100).toFixed(1) + '%'
+    shieldBar.className = 'sp-bar-fill sp-shield' +
+      (shieldPct <= 0.10 ? ' sp-crit' : shieldPct <= 0.25 ? ' sp-warn' : '')
+  }
+
+  // Armour bar
+  const armourMax = player.armourMax ?? 0
+  const armourRow = document.getElementById('sp-armour-row')
+  const armourBar = document.getElementById('sp-armour-bar')
+  if (armourRow) {
+    if (armourMax > 0) {
+      armourRow.style.display = ''
+      if (armourBar) armourBar.style.width = Math.max(0, (player.armour ?? 0) / armourMax * 100).toFixed(1) + '%'
+    } else {
+      armourRow.style.display = 'none'
+    }
+  }
+
+  // Clear dead nav target
+  if (navCombatTarget && !enemies.includes(navCombatTarget)) navCombatTarget = null
+
+  // Target section — show nearest enemy; highlight if TAB-locked
+  const targetSection = document.getElementById('sp-target-section')
+  if (targetSection) {
+    let target = navCombatTarget
+    if (!target && enemies.length > 0) {
+      let nearestD = Infinity
+      for (const e of enemies) {
+        const d = Math.hypot(player.x - e.x, player.y - e.y)
+        if (d < nearestD) { nearestD = d; target = e }
+      }
+    }
+    if (target) {
+      targetSection.style.display = ''
+      const elName = document.getElementById('sp-target-name')
+      const elType = document.getElementById('sp-target-type')
+      const elHp   = document.getElementById('sp-target-hp')
+      if (elName) elName.innerText = target.name || target.ship.name
+      if (elType) elType.innerText = target.bountyMissionId ? 'BOUNTY TARGET' : 'PIRATE'
+      if (elHp) {
+        const pct = target.ship.hull > 0 ? Math.max(0, target.hp / target.ship.hull) : 0
+        elHp.style.width = (pct * 100).toFixed(1) + '%'
+      }
+    } else {
+      targetSection.style.display = 'none'
+    }
+  }
+
+  // Nav ship line — show TAB target, enemy count, or autopilot
+  const elNavShip = document.getElementById('sp-nav-ship')
+  if (elNavShip) {
+    if (navCombatTarget) {
+      elNavShip.className = 'sp-nav-line sp-nav-ship-lock'
+      elNavShip.innerText = (navCombatTarget.name || navCombatTarget.ship.name) + ' [LOCKED]'
+    } else if (enemies.length > 0) {
+      elNavShip.className = 'sp-nav-line sp-nav-ship-warn'
+      elNavShip.innerText = enemies.length === 1 ? '1 hostile · TAB' : `${enemies.length} hostiles · TAB`
+    } else if (autopilot) {
+      elNavShip.className = 'sp-nav-line sp-nav-autopilot'
+      elNavShip.innerText = 'AP → ' + autopilot.name
+    } else {
+      elNavShip.className = 'sp-nav-line sp-nav-dim'
+      elNavShip.innerText = 'No contacts'
+    }
+  }
+
+  updateBoostHUD()
+  updateJumpHUD()
 }
 
 function updateMissileHUD() {
-  const el  = document.getElementById('hud-missile')
-  const sep = document.querySelector('.hud-missile-sep')
-  if (!el || !player) return
-  const hasMissileLauncher = player.upgrades && player.upgrades.includes('Missile Launcher')
-  if (!hasMissileLauncher) {
-    el.classList.add('hidden'); if (sep) sep.classList.add('hidden'); return
+  const section = document.getElementById('sp-missile-section')
+  if (!section || !player) return
+  const slots = player.weaponSlots ?? []
+  const hasAnyLauncher = slots.some(w =>
+    w === 'Missile Launcher' || w === 'Rocket Launcher' || w === 'Special Weapon Launcher')
+  if (!hasAnyLauncher) { section.style.display = 'none'; return }
+  section.style.display = ''
+  const ammoType = getSelectedAmmo()
+  const typeEl   = document.getElementById('sp-missile-type')
+  const countEl  = document.getElementById('sp-missile-count')
+  if (ammoType) {
+    const count = player.ammoInventory?.[ammoType] ?? 0
+    if (typeEl)  typeEl.innerText  = AMMO_LABEL[ammoType] ?? ammoType
+    if (countEl) {
+      countEl.innerText = count
+      countEl.className = 'sp-val' + (count === 0 ? ' sp-val-empty' : '')
+    }
+  } else {
+    if (typeEl)  typeEl.innerText  = 'No ammo'
+    if (countEl) { countEl.innerText = '0'; countEl.className = 'sp-val sp-val-empty' }
   }
-  el.classList.remove('hidden'); if (sep) sep.classList.remove('hidden')
-  const ammo = player.missileAmmo ?? 0
-  document.getElementById('hud-missile-count').innerText = ammo
-  el.className = 'hud-missile' + (ammo === 0 ? ' msl-empty' : '')
 }
 
 // ─── Save / Load ──────────────────────────────────────────────────────────────
@@ -2522,22 +2777,28 @@ function saveGame(slot = currentSlot) {
       version: 1,
       timestamp: Date.now(),
       player: {
-        system:       player.system,
-        ship:         player.ship,
-        hp:           player.hp,
-        fuel:         player.fuel ?? player.ship.fuel_capacity,
-        upgrades:     player.upgrades,
-        credits:      player.credits,
-        cargo:        player.cargo,
-        cargoPrices:  player.cargoPrices  ?? {},
-        missionCargo: player.missionCargo ?? {},
-        missions:     player.missions ?? [],
-        factionRep:   player.factionRep  ?? {},
-        difficulty:   player.difficulty  ?? 'normal',
-        missileAmmo:  player.missileAmmo ?? 0,
-        x:            player.x,
-        y:            player.y,
-        angle:        player.angle,
+        system:        player.system,
+        ship:          player.ship,
+        hp:            player.hp,
+        shield:        player.shield,
+        shieldDelay:   player.shieldDelay,
+        armour:        player.armour    ?? 0,
+        armourMax:     player.armourMax ?? 0,
+        fuel:          player.fuel ?? player.ship.fuel_capacity,
+        upgrades:      player.upgrades,
+        weaponSlots:   player.weaponSlots  ?? [],
+        ammoInventory: player.ammoInventory ?? {},
+        ramscoopFrac:  player.ramscoopFrac  ?? 0,
+        credits:       player.credits,
+        cargo:         player.cargo,
+        cargoPrices:   player.cargoPrices  ?? {},
+        missionCargo:  player.missionCargo ?? {},
+        missions:      player.missions ?? [],
+        factionRep:    player.factionRep  ?? {},
+        difficulty:    player.difficulty  ?? 'normal',
+        x:             player.x,
+        y:             player.y,
+        angle:         player.angle,
         vx:              0,
         vy:              0,
         angularVelocity: 0,
@@ -2636,8 +2897,26 @@ function loadGame(slot) {
     if (!player.factionRep)             player.factionRep      = Object.fromEntries(GAME_FACTIONS.map(f => [f.name, 0]))
     else GAME_FACTIONS.forEach(f => { if (!(f.name in player.factionRep)) player.factionRep[f.name] = 0 })
     if (!player.difficulty)             player.difficulty      = 'normal'
-    if (player.missileAmmo == null)     player.missileAmmo     = 0
     if (player.angularVelocity == null) player.angularVelocity = 0
+    if (player.shield == null)          player.shield          = player.ship.shield ?? 0
+    if (player.shieldDelay == null)     player.shieldDelay     = 0
+    if (player.armour == null)          player.armour          = 0
+    if (player.armourMax == null)       player.armourMax       = 0
+    if (!player.ammoInventory)          player.ammoInventory   = {}
+    if (player.ramscoopFrac == null)    player.ramscoopFrac    = 0
+    // Migrate old missileAmmo scalar to ammoInventory
+    if (player.missileAmmo != null && player.missileAmmo > 0) {
+      player.ammoInventory.homing_missile = (player.ammoInventory.homing_missile ?? 0) + player.missileAmmo
+      delete player.missileAmmo
+    }
+    // Migrate old flat upgrades to weaponSlots if weaponSlots not present
+    if (!player.weaponSlots) {
+      const wc = player.ship.weapon_slots ?? 1
+      player.weaponSlots = Array.from({ length: wc }, () => 'Laser Cannon')
+      // If old save had Missile Launcher in upgrades, move one weapon slot
+      const mlCount = (player.upgrades ?? []).filter(n => n === 'Missile Launcher').length
+      for (let k = 0; k < Math.min(mlCount, wc); k++) player.weaponSlots[k] = 'Missile Launcher'
+    }
     computeShipStats()
     playerStats       = data.playerStats ?? { jumpsTotal:0, creditsEarned:0, creditsSpent:0, missionsCompleted:0, enemiesDestroyed:0, cargoTraded:0, planetsVisited:0 }
     planetsVisitedSet = new Set(data.planetsVisitedSet ?? [])
@@ -2716,6 +2995,8 @@ function draw(timestamp) {
       updatePhysics(dt)
       checkNearPlanet()
       if (playerFireTimer > 0) playerFireTimer -= dt
+      if (protonFireTimer > 0) protonFireTimer -= dt
+      updateShields(dt)
       updateEnemies(dt)
       updateProjectiles(dt)
       updateParticles(dt)

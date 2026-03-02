@@ -95,12 +95,6 @@ function openLanding(specificPlanet) {
   // If called without argument, show all system planets (fallback / future use).
   const toShow = specificPlanet ? [specificPlanet] : sys.planets
 
-  // Missile Launcher: replenish ammo to 5 on any landing (free resupply)
-  if (player.upgrades?.includes('Missile Launcher') && (player.missileAmmo ?? 0) < 5) {
-    player.missileAmmo = 5
-    updateMissileHUD()
-  }
-
   // Auto Refueler: top up fuel automatically on landing (10% discount)
   if (player.upgrades?.includes('Auto Refueler') && specificPlanet?.fuel) {
     const cap   = player.ship.fuel_capacity
@@ -783,9 +777,16 @@ function buyShip(shipIdx) {
   }
   player.cargo    = newCargo
   player.ship     = Object.assign({}, ship)
-  player.hp       = ship.hull
-  player.fuel     = ship.fuel_capacity
-  player.upgrades = []
+  player.hp            = ship.hull
+  player.shield        = ship.shield ?? 0
+  player.shieldDelay   = 0
+  player.armour        = 0
+  player.armourMax     = 0
+  player.fuel          = ship.fuel_capacity
+  player.upgrades      = []
+  player.weaponSlots   = Array.from({ length: ship.weapon_slots }, () => 'Laser Cannon')
+  player.ammoInventory = {}
+  player.ramscoopFrac  = 0
   player.angularVelocity = 0
   computeShipStats()
 
@@ -795,126 +796,228 @@ function buyShip(shipIdx) {
 
 // ─── Upgrade shop ─────────────────────────────────────────────────────────────
 
+let activeUpgradeTab = 'ship'
+
 function openUpgradeShop(planet) {
-  currentPlanet = planet
-  const typeLabel = PLANET_TYPE_LABELS[planet.type] || planet.type
+  currentPlanet    = planet
+  activeUpgradeTab = 'ship'
+  const typeLabel  = PLANET_TYPE_LABELS[planet.type] || planet.type
   document.getElementById('upgrades-planet-name').innerText = planet.name + '  ·  ' + typeLabel
   renderUpgradeShop()
   showPanel('panel-upgrades')
+}
+
+function setUpgradeTab(tab) {
+  activeUpgradeTab = tab
+  renderUpgradeShop()
 }
 
 function renderUpgradeShop() {
   document.getElementById('upgrades-credits').innerText = player.credits.toLocaleString() + ' cr'
   document.getElementById('upgrades-slots').innerText   = player.ship.upgrade_slots
 
-  // Ship summary
+  const wsEl = document.getElementById('upgrades-wslots')
+  if (wsEl) {
+    const free = (player.weaponSlots ?? []).filter(w => w === 'Laser Cannon').length
+    wsEl.innerText = free + ' free'
+  }
+
+  // Ship summary + tab bar
   const shipInfo = document.getElementById('upgrades-ship-info')
   const statsHtml = SHIP_STAT_DEFS.map(d =>
     `<span>${d.label}: <strong>${player.ship[d.key]}</strong></span>`
   ).join('\n')
+
+  const TAB_LABELS = { ship: 'Ship Upgrades', weapons: 'Weapons', defence: 'Defence' }
+  const tabBarHtml = Object.keys(TAB_LABELS).map(t =>
+    `<button class="upgrade-tab${t === activeUpgradeTab ? ' active' : ''}" onclick="setUpgradeTab('${t}')">${TAB_LABELS[t]}</button>`
+  ).join('')
 
   shipInfo.innerHTML =
     `<div class="upgrades-ship-summary">` +
       `<div class="upgrades-ship-name">${player.ship.name}</div>` +
       `<div class="upgrades-stat-row">${statsHtml}</div>` +
     `</div>` +
-    `<div class="section-title" style="margin-bottom:12px">Available Upgrades</div>`
+    `<div class="upgrade-tab-bar">${tabBarHtml}</div>`
 
-  // Upgrade rows
+  // Filter to active tab
   const listEl = document.getElementById('upgrades-list')
   listEl.innerHTML = ''
 
-  GAME_UPGRADES.forEach((upgrade, idx) => {
-    const fittedCount = (player.upgrades ?? []).filter(n => n === upgrade.name).length
-    const alreadyFitted = upgrade.unique && fittedCount > 0
-    const canAfford  = player.credits >= upgrade.price
-    const hasSlots   = player.ship.upgrade_slots > 0
-    const canInstall = canAfford && hasSlots && !alreadyFitted
+  const tabItems   = GAME_UPGRADES.map((u, i) => ({ ...u, idx: i })).filter(u => u.tab === activeUpgradeTab)
+  const mainItems  = tabItems.filter(u => u.effect !== 'ammo')
+  const ammoItems  = tabItems.filter(u => u.effect === 'ammo')
+
+  const renderItem = upgrade => {
+    const slots    = player.weaponSlots ?? []
+    const upgrades = player.upgrades    ?? []
+
+    // Count fitted
+    let fittedCount
+    if (upgrade.effect === 'ammo') {
+      fittedCount = player.ammoInventory?.[upgrade.ammoType] ?? 0
+    } else if (upgrade.usesWeaponSlot) {
+      fittedCount = slots.filter(w => w === upgrade.name).length
+    } else {
+      fittedCount = upgrades.filter(n => n === upgrade.name).length
+    }
+
+    const atLimit      = upgrade.limit > 0 && fittedCount >= upgrade.limit
+    const alreadyFitted = atLimit && upgrade.effect !== 'ammo'
+    const canAfford    = player.credits >= upgrade.price
+    const prereqMet    = !upgrade.requiresUpgrade || slots.includes(upgrade.requiresUpgrade)
+    const hasFreeSlot  = slots.includes('Laser Cannon')
+
+    let canInstall
+    if (!prereqMet) {
+      canInstall = false
+    } else if (upgrade.effect === 'ammo') {
+      canInstall = canAfford
+    } else if (upgrade.usesWeaponSlot && upgrade.usesUpgradeSlot) {
+      canInstall = canAfford && player.ship.upgrade_slots > 0 && hasFreeSlot && !atLimit
+    } else if (upgrade.usesWeaponSlot) {
+      canInstall = canAfford && hasFreeSlot && !atLimit
+    } else if (upgrade.usesUpgradeSlot) {
+      canInstall = canAfford && player.ship.upgrade_slots > 0 && !atLimit
+    } else {
+      canInstall = canAfford && !atLimit
+    }
+
+    // Slot cost label for tooltip
+    let slotText = ''
+    if      (upgrade.usesUpgradeSlot && upgrade.usesWeaponSlot) slotText = '1 upgrade slot + 1 weapon slot'
+    else if (upgrade.usesUpgradeSlot)                           slotText = '1 upgrade slot'
+    else if (upgrade.usesWeaponSlot)                            slotText = '1 weapon slot'
+    else if (upgrade.effect === 'ammo')                         slotText = 'No slot cost'
+
+    const statChange = getUpgradeStatChange(upgrade)
+    const tipLines   = [upgrade.desc, statChange, slotText ? `Costs: ${slotText}` : null,
+                        `Price: ${upgrade.price.toLocaleString()} cr`].filter(Boolean).join('\n')
+
+    // Badge
+    let badgeHtml = ''
+    if (upgrade.effect === 'ammo' && fittedCount > 0) {
+      badgeHtml = ` <span class="upgrade-count-badge">×${fittedCount} in hold</span>`
+    } else if (fittedCount > 0 && upgrade.limit !== 1) {
+      badgeHtml = ` <span class="upgrade-count-badge">×${fittedCount} fitted</span>`
+    }
+
+    // Button
+    let btnHtml
+    if (alreadyFitted) {
+      btnHtml = `<button class="btn-install btn-fitted" disabled>✓ Fitted</button>`
+    } else if (!prereqMet) {
+      btnHtml = `<button class="btn-install" disabled title="Requires ${upgrade.requiresUpgrade}">Need launcher</button>`
+    } else if (upgrade.effect === 'ammo') {
+      btnHtml = `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${upgrade.idx})">Buy ×5</button>`
+    } else {
+      btnHtml = `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${upgrade.idx})">Install</button>`
+    }
 
     const row = document.createElement('div')
     row.className = 'upgrade-row' + (alreadyFitted ? ' upgrade-fitted' : '')
-
-    // Tooltip content
-    const statChange = getUpgradeStatChange(upgrade)
-    const tipLines   = [
-      formatUpgradeEffect(upgrade),
-      statChange,
-      'Costs 1 upgrade slot',
-      `Price: ${upgrade.price.toLocaleString()} cr`
-    ].filter(Boolean).join('\n')
-
     row.innerHTML =
       `<div class="upgrade-info">` +
-        `<div class="upgrade-name">${upgrade.name}` +
-          (fittedCount > 0 && !upgrade.unique ? ` <span class="upgrade-count-badge">×${fittedCount} fitted</span>` : '') +
-        `</div>` +
-        `<div class="upgrade-effect">${formatUpgradeEffect(upgrade)}</div>` +
+        `<div class="upgrade-name">${upgrade.name}${badgeHtml}</div>` +
+        `<div class="upgrade-effect">${upgrade.desc}</div>` +
         `<div class="upgrade-tooltip-box">${tipLines.replace(/\n/g, '<br>')}</div>` +
       `</div>` +
       `<div class="upgrade-price">${upgrade.price.toLocaleString()} cr</div>` +
-      (alreadyFitted
-        ? `<button class="btn-install btn-fitted" disabled>✓ Fitted</button>`
-        : `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${idx})">Install</button>`)
-
+      btnHtml
     listEl.appendChild(row)
-  })
-}
+  }
 
-function formatUpgradeEffect(upgrade) {
-  const d = upgrade.delta
-  switch (upgrade.effect) {
-    case 'cargo':      return `+${d} Cargo capacity`
-    case 'speed':      return `+${d} Speed`
-    case 'turn_rate':  return `+${d} Turn rate`
-    case 'inertia':    return `${d} Inertia (lower is better)`
-    case 'hull':       return `+${d} Hull strength`
-    case 'damage_pct': return `+${Math.round(d * 100)}% Weapon damage`
-    case 'jump_cost':  return `${Math.round(d * 100)}% Jump fuel cost`
-    case 'auto_refuel': return 'Auto top-up fuel on landing (10% discount)'
-    default:           return upgrade.effect
+  mainItems.forEach(renderItem)
+
+  if (ammoItems.length > 0) {
+    const hdr = document.createElement('div')
+    hdr.className = 'upgrade-ammo-section-hdr'
+    hdr.innerText = 'Ammunition'
+    listEl.appendChild(hdr)
+    ammoItems.forEach(renderItem)
   }
 }
 
 function getUpgradeStatChange(upgrade) {
-  const statMap = {
-    cargo:     'cargo',
-    speed:     'speed',
-    turn_rate: 'turn_rate',
-    inertia:   'inertia',
-    hull:      'hull'
-  }
+  const statMap = { cargo: 'cargo', speed: 'speed', turn_rate: 'turn_rate', inertia: 'inertia', hull: 'hull' }
   const key = statMap[upgrade.effect]
   if (!key) return null
   const cur  = player.ship[key]
   const next = cur + upgrade.delta
-  return `${key.replace('_',' ')}: ${cur} → ${next}`
+  return `${key.replace('_', ' ')}: ${cur} → ${next}`
 }
 
 function installUpgrade(upgradeIdx) {
   const upgrade = GAME_UPGRADES[upgradeIdx]
   if (!upgrade) return
-  if (player.credits < upgrade.price)    return
-  if (player.ship.upgrade_slots <= 0)    return
+  if (player.credits < upgrade.price) return
+
+  const slots    = player.weaponSlots ?? []
+  const upgrades = player.upgrades    ?? []
+
+  // Slot & prerequisite checks
+  if (upgrade.usesUpgradeSlot && player.ship.upgrade_slots <= 0) return
+  if (upgrade.usesWeaponSlot  && !slots.includes('Laser Cannon')) return
+  if (upgrade.requiresUpgrade && !slots.includes(upgrade.requiresUpgrade)) return
+  if (upgrade.limit > 0 && upgrade.effect !== 'ammo') {
+    const fitted = upgrade.usesWeaponSlot
+      ? slots.filter(w => w === upgrade.name).length
+      : upgrades.filter(n => n === upgrade.name).length
+    if (fitted >= upgrade.limit) return
+  }
 
   player.credits -= upgrade.price
   if (typeof playerStats !== 'undefined') playerStats.creditsSpent += upgrade.price
-  player.ship.upgrade_slots--
-  player.upgrades.push(upgrade.name)
 
+  // Consume slots
+  if (upgrade.usesUpgradeSlot) player.ship.upgrade_slots--
+  if (upgrade.usesWeaponSlot) {
+    const li = player.weaponSlots.indexOf('Laser Cannon')
+    if (li >= 0) player.weaponSlots[li] = upgrade.name
+  }
+
+  // Record installation (upgrade-slot items, excluding weapon-slot-only items and ammo)
+  if (!upgrade.usesWeaponSlot && upgrade.effect !== 'ammo') {
+    if (!player.upgrades) player.upgrades = []
+    player.upgrades.push(upgrade.name)
+  }
+
+  // Apply effect
   switch (upgrade.effect) {
-    case 'cargo':     player.ship.cargo     += upgrade.delta; break
+    case 'cargo':
+      player.ship.cargo += upgrade.delta; break
+    case 'cargo_converter':
+      player.ship.cargo         -= 10
+      player.ship.upgrade_slots += 1   // gained back — net is +1 since usesUpgradeSlot is false
+      break
     case 'speed':     player.ship.speed     += upgrade.delta; break
     case 'turn_rate': player.ship.turn_rate += upgrade.delta; break
-    case 'inertia':   player.ship.inertia   += upgrade.delta; break
+    case 'inertia':   player.ship.inertia    = Math.max(1, player.ship.inertia + upgrade.delta); break
     case 'hull':
       player.ship.hull += upgrade.delta
       player.hp = Math.min(player.hp + upgrade.delta, player.ship.hull)
       break
-    case 'missile_ammo': player.missileAmmo = upgrade.delta; break
-    // damage_pct and jump_cost applied in combat / travel (future phases)
+    case 'shield_regen':
+      player.ship.shield_regen = (player.ship.shield_regen ?? 0) + upgrade.delta; break
+    case 'armaplast':
+    case 'durasteel':
+      player.armourMax  = (player.armourMax ?? 0) + upgrade.delta
+      player.armour     = Math.min((player.armour ?? 0) + upgrade.delta, player.armourMax)
+      player.ship.cargo = Math.max(0, player.ship.cargo - (upgrade.armourMass ?? 0))
+      break
+    case 'ammo':
+      if (!player.ammoInventory) player.ammoInventory = {}
+      player.ammoInventory[upgrade.ammoType] = (player.ammoInventory[upgrade.ammoType] ?? 0) + upgrade.delta
+      break
+    // proton_cannon, missile_launcher, rocket_launcher, special_launcher:
+    //   weapon slot replacement already handled above; no additional stat change
+    // damage_pct: applied at fire time via player.upgrades check
+    // jump_cost, scanner_radius, auto_refuel, ramscoop, afterburner: looked up by name in game.js
   }
 
   updateHUD()
+  if (typeof updateMissileHUD === 'function') updateMissileHUD()
+  if (typeof updateSidePanel  === 'function') updateSidePanel()
   renderUpgradeShop()
 }
 
@@ -1179,6 +1282,8 @@ function renderPlayerInfo() {
     : '—'
   const statRows = [
     ['Hull',          `${player.hp} / ${s.hull}`],
+    ['Shield',        `${Math.round(player.shield ?? 0)} / ${s.shield ?? 0}  (regen ${s.shield_regen ?? 0}/s)`],
+    ...(player.armourMax > 0 ? [['Armour', `${player.armour} / ${player.armourMax}`]] : []),
     ['Speed',         s.speed],
     ['Turn Rate',     s.turn_rate],
     ['Inertia',       s.inertia],
@@ -1221,6 +1326,34 @@ function renderPlayerInfo() {
   }
   html += `</div>`
 
+  // ── Weapons (weapon slots) ──
+  const wslots = player.weaponSlots ?? []
+  html += `<div class="pi-section-title">Weapons</div><div class="pi-section">`
+  if (wslots.length === 0) {
+    html += `<div class="pi-empty">No weapon slots</div>`
+  } else {
+    const wCounts = {}
+    for (const w of wslots) wCounts[w] = (wCounts[w] ?? 0) + 1
+    html += `<div class="pi-upgrade-list">`
+    for (const [name, count] of Object.entries(wCounts)) {
+      html += `<div class="pi-upgrade-row"><span class="pi-upgrade-name">${name}${count > 1 ? ` ×${count}` : ''}</span><span class="pi-upgrade-eff"></span></div>`
+    }
+    html += `</div>`
+  }
+  html += `</div>`
+
+  // ── Ammo inventory ──
+  const ammoInv = player.ammoInventory ?? {}
+  const ammoEntries = Object.entries(ammoInv).filter(([,q]) => q > 0)
+  if (ammoEntries.length > 0) {
+    html += `<div class="pi-section-title">Ammunition</div><div class="pi-section"><div class="pi-upgrade-list">`
+    for (const [type, qty] of ammoEntries) {
+      const label = (typeof AMMO_LABEL !== 'undefined' && AMMO_LABEL[type]) || type
+      html += `<div class="pi-upgrade-row"><span class="pi-upgrade-name">${label}</span><span class="pi-upgrade-eff">×${qty}</span></div>`
+    }
+    html += `</div></div>`
+  }
+
   // ── Fitted upgrades ──
   html += `<div class="pi-section-title">Fitted Upgrades</div><div class="pi-section">`
   if (upgradesOn.length === 0) {
@@ -1231,7 +1364,7 @@ function renderPlayerInfo() {
     html += `<div class="pi-upgrade-list">`
     for (const [name, count] of Object.entries(counts)) {
       const def = GAME_UPGRADES.find(u => u.name === name)
-      const eff = def ? formatUpgradeEffect(def) : ''
+      const eff = def ? def.desc : ''
       html += `<div class="pi-upgrade-row">
         <span class="pi-upgrade-name">${name}${count > 1 ? ` ×${count}` : ''}</span>
         <span class="pi-upgrade-eff">${eff}</span>

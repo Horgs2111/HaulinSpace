@@ -10,26 +10,85 @@
 
 <canvas id="gameCanvas" width="1200" height="800"></canvas>
 
-<!-- Always-visible HUD -->
+<!-- Side panel HUD -->
 <div id="hud" class="hidden">
-  <div id="hud-ship">—</div>
-  <div class="hud-sep"></div>
-  <div id="hud-location">—</div>
-  <div class="hud-sep"></div>
-  <div class="hud-stat">Credits <span id="hud-credits">—</span></div>
-  <div class="hud-sep"></div>
-  <div class="hud-stat">Cargo <span id="hud-cargo">—</span></div>
-  <div class="hud-sep"></div>
-  <div class="hud-fuel">
-    <span class="hud-fuel-label">Fuel</span>
-    <div id="hud-fuel-bar" class="fuel-bar"></div>
-    <span id="hud-fuel-text" class="hud-fuel-text">—</span>
+
+  <!-- Minimap -->
+  <div class="sp-minimap-wrap">
+    <canvas id="minimap-canvas" width="190" height="190"></canvas>
   </div>
-  <div class="hud-sep"></div>
-  <div id="hud-missile" class="hud-missile hidden">MSL&nbsp;<span id="hud-missile-count">0</span></div>
-  <div class="hud-sep hud-missile-sep hidden"></div>
-  <div id="hud-jump" class="hud-jump"></div>
-  <button class="btn-cog" id="btn-cog" onclick="openPauseMenu()">⚙</button>
+
+  <!-- Ship stats -->
+  <div class="sp-section">
+    <div id="sp-ship-name" class="sp-ship-name">—</div>
+    <div class="sp-bar-row">
+      <span class="sp-label">SHIELD</span>
+      <div class="sp-bar-track"><div class="sp-bar-fill sp-shield" id="sp-shield-bar" style="width:100%"></div></div>
+    </div>
+    <div class="sp-bar-row" id="sp-armour-row" style="display:none">
+      <span class="sp-label">ARMOUR</span>
+      <div class="sp-bar-track"><div class="sp-bar-fill sp-armour" id="sp-armour-bar" style="width:100%"></div></div>
+    </div>
+    <div class="sp-bar-row">
+      <span class="sp-label">FUEL</span>
+      <div class="sp-bar-track"><div class="sp-bar-fill sp-fuel" id="sp-fuel-bar" style="width:100%"></div></div>
+    </div>
+    <div class="sp-bar-row">
+      <span class="sp-label">BOOST</span>
+      <div class="sp-bar-track"><div class="sp-bar-fill boost-fill-ready" id="sp-boost-bar" style="width:100%"></div></div>
+    </div>
+  </div>
+
+  <!-- Nav info -->
+  <div class="sp-section">
+    <div class="sp-row"><span class="sp-key">SYSTEM</span><span id="sp-system" class="sp-val">—</span></div>
+    <div class="sp-row" id="sp-grav-row" style="display:none"><span class="sp-key">GRAVITY</span><span id="sp-grav" class="sp-val">—</span></div>
+    <div class="sp-row"><span class="sp-key">SPEED</span><span id="sp-speed" class="sp-val">—</span></div>
+    <div class="sp-row"><span class="sp-key">HDG</span><span id="sp-hdg" class="sp-val">—</span></div>
+  </div>
+
+  <!-- Nav system -->
+  <div class="sp-section">
+    <div class="sp-section-hdr">NAV SYSTEM</div>
+    <div id="sp-nav-jump" class="sp-nav-line sp-nav-dim">No jump target</div>
+    <div id="sp-nav-ship" class="sp-nav-line sp-nav-dim">No contacts</div>
+  </div>
+
+  <!-- Target detail -->
+  <div class="sp-section" id="sp-target-section" style="display:none">
+    <div class="sp-section-hdr">TARGET</div>
+    <div id="sp-target-name" class="sp-target-name">—</div>
+    <div id="sp-target-type" class="sp-target-type">—</div>
+    <div class="sp-bar-row">
+      <span class="sp-label">HULL</span>
+      <div class="sp-bar-track"><div class="sp-bar-fill sp-enemy" id="sp-target-hp" style="width:100%"></div></div>
+    </div>
+  </div>
+
+  <!-- Missiles -->
+  <div class="sp-section" id="sp-missile-section" style="display:none">
+    <div class="sp-row"><span class="sp-key">MISSILE</span><span id="sp-missile-type" class="sp-val">—</span></div>
+    <div class="sp-row"><span class="sp-key">AMMO</span><span id="sp-missile-count" class="sp-val">—</span></div>
+  </div>
+
+  <!-- Credits -->
+  <div class="sp-section">
+    <div class="sp-row"><span class="sp-key">CREDITS</span><span id="sp-credits" class="sp-val sp-credits-val">—</span></div>
+  </div>
+
+  <!-- Cargo -->
+  <div class="sp-section">
+    <div class="sp-row"><span class="sp-key">CARGO</span><span id="sp-cargo" class="sp-val">—</span></div>
+  </div>
+
+  <!-- Spacer -->
+  <div class="sp-spacer"></div>
+
+  <!-- Settings -->
+  <div class="sp-footer">
+    <button class="btn-cog" id="btn-cog" onclick="openPauseMenu()">⚙ Settings</button>
+  </div>
+
 </div>
 
 <!-- Title screen -->
@@ -63,12 +122,12 @@
       <div class="credits-section-title">Controls</div>
       <div class="credits-controls-grid">
         <span class="ck">W / A / S / D</span><span class="cv">Thrust · Rotate · Brake</span>
-        <span class="ck">Shift</span>          <span class="cv">Boost</span>
+        <span class="ck">B</span>              <span class="cv">Boost</span>
         <span class="ck">L</span>              <span class="cv">Land / Leave planet</span>
         <span class="ck">M</span>              <span class="cv">Galaxy Map</span>
         <span class="ck">J</span>              <span class="cv">Jump</span>
         <span class="ck">Space</span>          <span class="cv">Fire weapon</span>
-        <span class="ck">X</span>              <span class="cv">Fire missile</span>
+        <span class="ck">X</span>              <span class="cv">Fire missile / rocket (buy ammo at Upgrade Shop)</span>
         <span class="ck">I</span>              <span class="cv">Commander Status</span>
         <span class="ck">Esc</span>            <span class="cv">Pause / Menu</span>
       </div>
@@ -267,7 +326,9 @@
     <div class="panel-header-right">
       Credits&nbsp;<span id="upgrades-credits">—</span>
       &nbsp;&nbsp;·&nbsp;&nbsp;
-      Slots&nbsp;<span id="upgrades-slots">—</span>
+      Up.Slots&nbsp;<span id="upgrades-slots">—</span>
+      &nbsp;&nbsp;·&nbsp;&nbsp;
+      Wpn.Slots&nbsp;<span id="upgrades-wslots">—</span>
     </div>
   </div>
   <div class="panel-body">
