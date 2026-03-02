@@ -561,40 +561,294 @@ player — they can only drift and fight until refuelled.
     - "NO FUEL" shown in red beside the fuel bar
 
 ===========================================
+PHASE 23 — NEWTONIAN PHYSICS & GRAVITY WELLS
+===========================================
+
+Replace the simplified speed/turn_rate stat system with mass-based Newtonian
+physics. Ships have real mass; thrust and RCS ratings drive acceleration and
+rotation; planets and stars exert gravity within a defined radius.
+
+All masses expressed in Tonnes (T). All thrust expressed in T/s (equivalent
+to kN normalised to the game's unit scale).
+
+---
+
+SHIP MASS DATA  (data/gamedata.js — GAME_SHIPS)
+
+[ ] Add hull_mass (T) to each ship — the bare-hull mass with no equipment or cargo
+    Suggested values scaled to tier:
+      Tier 1 ~  80 T  (shuttle class)
+      Tier 2 ~ 150 T
+      Tier 3 ~ 300 T
+      Tier 4 ~ 600 T
+      Tier 5 ~1200 T
+      Tier 6 ~2500 T  (dreadnought)
+    (Retain existing speed/turn_rate stats as fallback until Phase 23 is live)
+
+---
+
+EQUIPMENT CATALOGUE  (data/gamedata.js — new GAME_EQUIPMENT array)
+
+[ ] Each equipment object:
+      { name, type, mass_t, price, size, description,
+        thrust_ts?,    // T/s — engines only
+        rcs_ts?        // T/s — thrusters only
+      }
+    Types:
+      'engine'    — primary drive; provides TotalThrust
+      'thruster'  — RCS pods; provides TotalRCS
+      'weapon'    — weapons (already modelled, gain mass)
+      'utility'   — scanners, cargo expanders, etc. (existing upgrades)
+    'size' field limits which ship hulls can fit the item (1–6 matching ship tier)
+
+[ ] Starter equipment set (examples):
+      { name:'Basic Ion Drive',      type:'engine',   mass_t:12, thrust_ts:40,  size:1, price:0      }
+      { name:'Improved Ion Drive',   type:'engine',   mass_t:18, thrust_ts:75,  size:2, price:8000   }
+      { name:'Heavy Plasma Drive',   type:'engine',   mass_t:45, thrust_ts:200, size:4, price:35000  }
+      { name:'Basic RCS Package',    type:'thruster', mass_t:4,  rcs_ts:20,     size:1, price:0      }
+      { name:'Precision RCS Array',  type:'thruster', mass_t:8,  rcs_ts:50,     size:2, price:10000  }
+    (Existing GAME_UPGRADES become 'utility' equipment; keep backward compat)
+
+---
+
+CARGO MASS  (data/gamedata.js — GAME_COMMODITIES)
+
+[ ] Add mass_t_per_unit to each commodity (mass per 1 cargo unit)
+    Suggested values:
+      Ore, Metals:       2.0 T/unit  (dense)
+      Machinery:         1.5 T/unit
+      Food, Textiles:    0.8 T/unit
+      Medicine, Luxuries:0.3 T/unit  (light, high-value)
+      Fuel:              1.2 T/unit
+      Contraband, Weapons:0.5 T/unit
+
+---
+
+COMPUTED SHIP PROPERTIES  (game.js)
+
+[ ] player object gains an equipment[] array alongside existing cargo{}
+    Each entry: { ...equipmentDef, qty: 1 }
+
+[ ] Three computed helpers (called whenever loadout or cargo changes):
+
+    function computeShipMass(player):
+      TotalMass = player.ship.hull_mass
+               + sum(e.mass_t for e in player.equipment)
+               + sum(qty * COMMODITY_MASS[id] for id,qty in player.cargo)
+      → stored as player.totalMass_t
+
+    function computeTotalThrust(player):
+      TotalThrust = sum(e.thrust_ts for e in player.equipment if e.type==='engine')
+      → stored as player.totalThrust_ts
+
+    function computeTotalRCS(player):
+      TotalRCS = sum(e.rcs_ts for e in player.equipment if e.type==='thruster')
+      → stored as player.totalRCS_ts
+
+    Recompute all three whenever:
+      - Equipment is installed or removed
+      - Cargo is bought, sold, or jettisoned
+      - Ship is purchased (reset to hull defaults + starter equipment)
+
+---
+
+PHYSICS UPDATE  (game.js — updateShip / physics loop)
+
+Current model:  velocity capped at ship.speed×30; rotation at ship.turn_rate×25°/s
+New model:
+
+[ ] Linear acceleration (W key):
+      accel = TotalThrust / TotalMass         (T/s / T = game-units/s²)
+      Scale factor k_thrust ≈ 0.35 (tune to feel)
+      vx += cos(angle) × accel × k_thrust × dt
+      vy += sin(angle) × accel × k_thrust × dt
+      No hard speed cap — terminal velocity emerges from drag/inertia
+
+[ ] Reverse/brake (S key):
+      apply 60% of forward accel in reverse direction (RCS braking)
+
+[ ] Rotation (A/D keys):
+      angular_accel = TotalRCS / TotalMass    (T/s / T = rad/s²)
+      Scale factor k_rcs ≈ 0.04 (tune to feel)
+      angularVelocity += ±angular_accel × k_rcs × dt
+      player.angle    += angularVelocity × dt
+      angularVelocity *= (1 - 6×dt)           (angular drag, tune)
+
+[ ] Inertia damping:
+      Retain exponential velocity damping (time constant from ship.inertia)
+      Heavier ships damp more slowly — multiply time constant by TotalMass/ref_mass
+
+---
+
+GRAVITY WELLS  (game.js)
+
+[ ] Each planet and the system star gets a gravity field:
+      planet.gravity_ms2  — surface gravitational acceleration (m/s²)
+      planet.gravity_radius — distance at which gravity becomes negligible (world units)
+    Suggested values:
+      Gas giants / stars:  gravity_ms2 = 9.8,  gravity_radius = 800
+      Rocky planets:       gravity_ms2 = 3.2,  gravity_radius = 400
+      Small moons:         gravity_ms2 = 1.2,  gravity_radius = 200
+      Star (centre):       gravity_ms2 = 25.0, gravity_radius = 1200
+
+[ ] Gravity acceleration formula (applied every physics tick):
+      dist = distance(ship, body)
+      if dist < body.gravity_radius:
+        g = body.gravity_ms2 × (body.gravity_radius / dist)²
+        g = min(g, 50)                    -- clamp to avoid singularity at close range
+        g_scale = 0.012                   -- tune to game units
+        vx += (body.x - ship.x) / dist × g × g_scale × dt
+        vy += (body.y - ship.y) / dist × g × g_scale × dt
+
+[ ] Gravity applied to:
+      - Player ship
+      - Enemy ships (creates interesting combat near planets)
+      - NPC traders (makes orbital paths emerge naturally)
+      - Missiles (gravity-affected — can curve into planets)
+      - NOT loot items or projectile bolts (performance + feels bad)
+
+[ ] HUD gravity indicator:
+      Show "GRAVITY" warning label when any body is exerting > threshold g on ship
+      Show escape thrust requirement: "Need Xg thrust to escape"
+
+---
+
+SLINGSHOT MANOEUVRE
+
+[ ] Emerges naturally from the gravity + physics system — no extra code needed
+    Heavy cargo ships can "fall" around a planet to gain speed without burning fuel
+    Document in in-game tutorial step 6 (add step) or tooltip
+
+---
+
+CARGO JETTISON  (ui.js + game.js)
+
+[ ] "Jettison Cargo" button in Cargo Manifest panel (panel-cargo)
+    Per-commodity row: qty input + Jettison button
+    Jettisoned cargo spawns as loot at ship's current position
+    Recomputes TotalMass immediately → ship accelerates faster
+    Confirmation prompt: "Jettison X units of Y? This cannot be undone."
+
+---
+
+EQUIPMENT SHOP  (ui.js)
+
+[ ] Replace / extend Upgrade Shop (panel-upgrades) to list GAME_EQUIPMENT
+    Filter by equipment size ≤ ship tier
+    Show mass, thrust/RCS rating alongside price
+    Installed equipment shown in player info panel with mass breakdown
+
+---
+
+HUD & PLAYER INFO UPDATES
+
+[ ] Commander Status panel (panel-playerinfo) — new Physics section:
+      Hull mass:     XXX T
+      Equipment:     XXX T  (N items)
+      Cargo:         XXX T  (N / cap units)
+      ─────────────────────
+      Total mass:    XXX T
+      Thrust:        XX T/s  →  X.Xg at current mass
+      RCS:           XX T/s  →  X.X°/s² at current mass
+
+[ ] HUD: existing speed readout (SPD) already drawn on canvas — keep as-is
+    Add small "g: X.X" gravity indicator when in a gravity well
+
+---
+
+BACKWARD COMPATIBILITY
+
+[ ] During transition:
+      - Ships without hull_mass fall back to tier × 100 T
+      - Ships without equipment array use estimated thrust from existing speed stat
+      - Saves load fine; totalMass recomputed on load from current loadout
+
+===========================================
+PHASE 24 — FACTION JUMP GATES
+===========================================
+
+Each faction operates one large jump gate somewhere in its territory. Gates
+allow the player to skip across a large swathe of the galaxy in a single jump
+— bypassing the need to hop through a dozen intermediate systems. A gate is
+only usable once the player has physically visited the system it lives in.
+
+Gates are distinct from the existing system-to-system jump drive, which remains
+unchanged. Think of the drive as local freight lanes and gates as express
+corridors between faction capitals.
+
+---
+
+GATE PLACEMENT  (starmap-generator.js)
+
+[ ] One gate per faction — placed in the faction's most central cluster system
+    (the system closest to the cluster's centroid)
+    Stored in galaxy.jumpGates = [ { factionName, systemId, x, y, destSystemId }, ... ]
+
+[ ] Gate destination is the most central system of each OTHER faction (round-robin
+    pairing so gates form a ring: Traders → Navy → Miners → Pirates → Traders)
+    Distance between paired systems should be at least 20 hops; if not, pick the
+    farthest known system of that faction instead
+
+[ ] Gate is a physical object in the system view — a large orbital ring structure
+    rendered near the star (800–1000 world units out on a fixed bearing)
+    Visible as a glowing ring matching faction colour; animated slow rotation
+
+---
+
+DISCOVERY & ACCESS  (game.js)
+
+[ ] A gate is "known" only if systemStates.get(gate.systemId) is 'visited'
+    (player has physically been in that system — just discovering it is not enough)
+
+[ ] Gates shown on galaxy map only for known systems:
+    - Distinct icon on the galaxy map node (concentric ring symbol)
+    - Tooltip lists gate destination system name and faction
+
+[ ] Attempting to use an unknown gate (e.g. via console or future NPC tip)
+    shows: "Gate access requires docking at [System Name] first"
+
+---
+
+USING A GATE  (game.js + ui.js)
+
+[ ] Player flies close to the gate structure (proximity radius ~120 world units)
+    — same mechanic as planet landing range
+
+[ ] Prompt appears: "Press L to access [Faction] Jump Gate"
+
+[ ] Gate panel (panel-gate) opens — similar to planet landing panel:
+    - Shows faction name, gate destination system and its faction
+    - Shows player's current reputation with gate's faction
+    - Fuel cost: 3 units (same as 3 normal jumps — gates burn reserve power)
+    - Hostile rep (≤ -50) blocks access: "Gate authority has locked you out"
+    - "Engage Gate" button initiates the long-range jump
+
+[ ] Long-range jump sequence:
+    - Same warp animation as normal jump but extended (warp lines last longer)
+    - Arrival: player spawns near the destination gate structure
+    - All intermediate systems along the shortest path are marked 'discovered'
+      (the transit computer pings them — player gets partial map data)
+    - galaxy map jump target is cleared on arrival
+
+---
+
+GALAXY MAP  (game.js — drawSystems / drawConnections)
+
+[ ] Draw gate connections as distinct lines on galaxy map:
+    - Dashed or double-line style, faction colour at higher opacity than normal lanes
+    - Only drawn if both the source system is 'visited' (gate known)
+    - Label the line "Jump Gate" on hover
+
+---
+
+ECONOMY & REPUTATION HOOKS  (future extension — not in this phase)
+
+    Gate tax, faction-controlled access tiers, and gate destruction are deferred.
+    This phase establishes the physical infrastructure and travel mechanic only.
+
+===========================================
 WISHLIST — FUTURE / BIG IDEAS
 ===========================================
 
 Ideas that would significantly expand the game but require substantial design
 and implementation work. Not scheduled for any phase yet.
-
----
-
-[ ] Jump Gates
-    Every system has a single jump gate acting as the sole entry and exit point
-    for smaller ships. Ships below cruiser class have no on-board jump drive and
-    must use the gate. Cruiser-class and larger carry their own jump engines and
-    can open a jump point anywhere in the system.
-
-    Gameplay implications:
-    - Gates are natural choke points — controlling or destroying one locks down
-      a system's traffic. Could create tense tactical situations for traders and
-      pirates alike.
-    - Large ships with jump engines can jump anywhere, enabling pincer manoeuvres
-      (fleet warps behind an enemy that expected them to use the gate).
-    - Gates are destructible but regenerate quickly; taking one out is a
-      disruptive but temporary play.
-    - Jump engines aboard large ships have a warm-up and cool-down window that
-      leaves the ship exposed — a trade-off vs. the convenience of the gate.
-    - The faction controlling a system can levy a gate tax on passing ships,
-      creating a steady passive income stream for the player if they hold systems.
-    - Even ships with jump engines may prefer the gate to avoid the energy cost
-      and vulnerability of a manual jump — making gate use an interesting
-      economic/risk decision rather than an obvious choice.
-
-    Design questions to resolve before implementing:
-    - Where is the gate physically placed in the system view? Fixed edge position
-      or near the star?
-    - Does the player's current ship (Shuttle etc.) have a jump drive at all, or
-      is jumping always gate-dependent until they buy a cruiser?
-    - How does gate tax interact with faction reputation?
-    - Can pirates blockade a gate? Can the player do the same?
