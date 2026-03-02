@@ -425,9 +425,9 @@ PHASE 19 — REMAINING CONTENT & GAMEPLAY
     - Player must keep it alive; pirate aggression scales up during escort
     - Reward on successful arrival at destination
 
-[ ] Faction border overlays on galaxy map
-    - Soft coloured territory regions behind system nodes
-    - Convex hull or radial blend around each faction's cluster
+[x] Faction border overlays on galaxy map
+    - Radial gradient blobs per known system, blending into soft faction territories
+    - Drawn between nebula and connection layers in drawGalaxyMapOverlay()
 
 [x] Additional galactic events
     - Faction War: two factions conflict; systems contested, rep effects
@@ -450,16 +450,18 @@ PHASE 19 — REMAINING CONTENT & GAMEPLAY
 [x] Difficulty settings (New Game screen)
     - Easy / Normal / Hard — affects starting credits, piracy rates, combat damage
 
-[ ] Tutorial / onboarding
-    - First-launch tooltip sequence covering movement, landing, market, jumping
-    - Can be skipped
+[x] Tutorial / onboarding
+    - 5-step card shown on first new game (localStorage flag suppresses on repeat)
+    - Covers: piloting, landing, trading, galaxy map, jumping
+    - Next/Skip buttons; loading a save skips it entirely
 
 [x] Statistics screen
     - Total jumps, credits earned, cargo traded, enemies destroyed, missions completed
     - Accessible from main menu or settings panel
 
-[ ] Credits / about screen
-    - Game version, controls reference
+[x] Credits / about screen
+    - Accessible from main menu; shows game title, version, full controls reference
+    - Controls grid with all keybindings (W/A/S/D, L, M, J, Space, X, Shift, I, Esc)
 
 ===========================================
 PHASE 20 — IN-GAME MENU REVAMP

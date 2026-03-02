@@ -240,6 +240,73 @@ let particles    = []      // { x, y, vx, vy, life, maxLife, color, size }
 let nebulaFields = []      // { x, y, radius, hue } — galaxy map nebula clouds
 let wasThrusting = false   // for thrust audio toggle
 
+// ── Tutorial ──────────────────────────────────────────────────────────────────
+let tutorialStep = null    // 0-4 while active, null when inactive
+
+const TUTORIAL_STEPS = [
+  {
+    title: 'Piloting Your Ship',
+    body:  'Use <strong>W / A / S / D</strong> to fly — W thrusts forward, S brakes, A/D rotate.<br>Hold <strong>Shift</strong> for a short speed boost.'
+  },
+  {
+    title: 'Landing on Planets',
+    body:  'Fly close to a planet — it pulses <span style="color:#5599ff">blue</span> when in landing range.<br>Press <strong>L</strong> to land and access its facilities.'
+  },
+  {
+    title: 'Trading',
+    body:  'Visit a planet\'s <strong>Market</strong> to buy commodities cheap and sell them elsewhere for profit.<br>Cargo space is limited — choose wisely.'
+  },
+  {
+    title: 'Galaxy Map &amp; Jump Targets',
+    body:  'Press <strong>M</strong> to open the Galaxy Map.<br>Click a connected system to set it as your jump target.'
+  },
+  {
+    title: 'Jumping Between Systems',
+    body:  'Fly away from all planets until <strong>JUMP READY</strong> appears in the HUD, then press <strong>J</strong>.<br>Fuel is finite — refuel at planets before you\'re stranded!'
+  }
+]
+
+function initTutorial() {
+  if (localStorage.getItem('hs_tutorial_done')) { tutorialStep = null; return }
+  tutorialStep = 0
+  renderTutorialCard()
+  document.getElementById('tutorial-card').classList.remove('hidden')
+}
+
+function renderTutorialCard() {
+  if (tutorialStep === null) return
+  const step = TUTORIAL_STEPS[tutorialStep]
+  document.getElementById('tutorial-step-label').innerText =
+    `Step ${tutorialStep + 1} of ${TUTORIAL_STEPS.length}`
+  document.getElementById('tutorial-title').innerText = ''
+  document.getElementById('tutorial-title').textContent = ''
+  // Use innerHTML for step title so HTML entities render
+  document.getElementById('tutorial-title').innerHTML = step.title
+  document.getElementById('tutorial-body').innerHTML  = step.body
+  const nextBtn = document.getElementById('btn-tutorial-next')
+  nextBtn.innerText = tutorialStep === TUTORIAL_STEPS.length - 1 ? 'Done ✓' : 'Next →'
+}
+
+function advanceTutorial() {
+  if (tutorialStep === null) return
+  if (tutorialStep >= TUTORIAL_STEPS.length - 1) {
+    completeTutorial()
+  } else {
+    tutorialStep++
+    renderTutorialCard()
+  }
+}
+
+function completeTutorial() {
+  tutorialStep = null
+  localStorage.setItem('hs_tutorial_done', '1')
+  document.getElementById('tutorial-card').classList.add('hidden')
+}
+
+function skipTutorial() {
+  completeTutorial()
+}
+
 // ── Phase 21 — QoL ────────────────────────────────────────────────────────────
 let autopilot            = null             // planet object (with .sx,.sy) when autopilot active
 let priceHistory         = new Map()        // 'planetId:commodityId' → [last 5 buy prices]
@@ -840,6 +907,7 @@ function drawGalaxyMapOverlay() {
   ctx.save()
   ctx.setTransform(viewScale, 0, 0, viewScale, viewOffsetX, viewOffsetY)
   drawNebulaFields()
+  drawFactionTerritories()
   drawConnections()
   drawJumpTargetLine()
   drawSystems()
@@ -864,6 +932,36 @@ function drawJumpTargetLine() {
   ctx.beginPath(); ctx.moveTo(current.x, current.y); ctx.lineTo(target.x, target.y)
   ctx.stroke()
   ctx.restore()
+}
+
+function drawFactionTerritories() {
+  if (!galaxy) return
+  // Group all known (discovered/visited/scanned) systems by faction
+  const factionSystems = new Map()
+  for (const sys of galaxy.systems) {
+    if (!systemStates.has(sys.id) || !sys.faction) continue
+    if (!factionSystems.has(sys.faction)) factionSystems.set(sys.faction, [])
+    factionSystems.get(sys.faction).push(sys)
+  }
+
+  for (const [factionName, systems] of factionSystems) {
+    const faction = GAME_FACTIONS.find(f => f.name === factionName)
+    if (!faction) continue
+    // Radial gradient blob per system — adjacent systems blend naturally
+    for (const sys of systems) {
+      ctx.save()
+      const r    = 160
+      const grad = ctx.createRadialGradient(sys.x, sys.y, 0, sys.x, sys.y, r)
+      grad.addColorStop(0,    hexToRgba(faction.color, 0.11))
+      grad.addColorStop(0.55, hexToRgba(faction.color, 0.055))
+      grad.addColorStop(1,    hexToRgba(faction.color, 0))
+      ctx.fillStyle = grad
+      ctx.beginPath()
+      ctx.arc(sys.x, sys.y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+  }
 }
 
 function drawConnections() {
@@ -2175,6 +2273,7 @@ function initGame(difficulty = 'normal') {
   AudioEngine.startSpaceMusic()
   updateHUD()
   updateJumpHUD()
+  initTutorial()
 }
 
 function setSystemState(id, state) {

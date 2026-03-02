@@ -1826,3 +1826,160 @@ canvas {
   text-align: right;
   white-space: nowrap;
 }
+
+/* ─── Credits screen ────────────────────────────────────────────────────────── */
+
+.credits-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background: rgba(8, 14, 32, 0.97);
+  border: 1px solid rgba(68, 136, 255, 0.3);
+  border-radius: 12px;
+  padding: 40px 52px;
+  min-width: 480px;
+  max-width: 580px;
+  box-shadow: 0 0 48px rgba(40, 80, 200, 0.18);
+}
+
+.credits-title {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: #c8d8f8;
+  text-shadow: 0 0 24px rgba(80, 140, 255, 0.5);
+}
+
+.credits-version {
+  font-size: 0.78rem;
+  color: #4a6888;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: -14px;
+}
+
+.credits-tagline {
+  font-size: 0.9rem;
+  color: #5a7aaa;
+  letter-spacing: 0.08em;
+}
+
+.credits-section {
+  width: 100%;
+}
+
+.credits-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #3a5888;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(60, 100, 180, 0.25);
+}
+
+.credits-controls-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 7px 16px;
+}
+
+.ck {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #7090c0;
+  background: rgba(30, 50, 100, 0.4);
+  border: 1px solid rgba(60, 100, 180, 0.3);
+  border-radius: 4px;
+  padding: 3px 8px;
+  text-align: center;
+}
+
+.cv {
+  font-size: 0.82rem;
+  color: #8899bb;
+  display: flex;
+  align-items: center;
+}
+
+.credits-back-btn { margin-top: 8px; }
+
+/* ─── Tutorial card ──────────────────────────────────────────────────────────── */
+
+.tutorial-card {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 420px;
+  background: rgba(8, 14, 32, 0.94);
+  border: 1px solid rgba(68, 136, 255, 0.4);
+  border-radius: 10px;
+  padding: 16px 20px 14px;
+  z-index: 35;
+  box-shadow: 0 0 24px rgba(40, 80, 200, 0.22);
+}
+
+.tutorial-card.hidden { display: none; }
+
+.tutorial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.tutorial-step-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #3a5888;
+  text-transform: uppercase;
+}
+
+.tutorial-skip-btn {
+  background: none;
+  border: none;
+  color: #445566;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tutorial-skip-btn:hover { color: #8899bb; }
+
+.tutorial-title-text {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #c0d4f4;
+  margin-bottom: 6px;
+}
+
+.tutorial-body {
+  font-size: 0.85rem;
+  color: #7a90b8;
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+
+.tutorial-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tutorial-next-btn {
+  background: rgba(30, 60, 140, 0.5);
+  border: 1px solid rgba(68, 136, 255, 0.4);
+  border-radius: 6px;
+  color: #88aaee;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tutorial-next-btn:hover { background: rgba(40, 80, 180, 0.7); color: #c0d4ff; }

@@ -48,7 +48,34 @@
     <button class="menu-btn" id="btn-new-game">New Game</button>
     <button class="menu-btn" id="btn-load-game">Load Game</button>
     <button class="menu-btn" id="btn-options">Options</button>
+    <button class="menu-btn" id="btn-credits">Credits</button>
   </nav>
+</div>
+
+<!-- Credits screen -->
+<div id="screen-credits" class="fullscreen-overlay hidden">
+  <div class="credits-modal">
+    <div class="credits-title">HAULIN SPACE</div>
+    <div class="credits-version">Early Access Build</div>
+    <div class="credits-tagline">Trade · Explore · Survive</div>
+
+    <div class="credits-section">
+      <div class="credits-section-title">Controls</div>
+      <div class="credits-controls-grid">
+        <span class="ck">W / A / S / D</span><span class="cv">Thrust · Rotate · Brake</span>
+        <span class="ck">Shift</span>          <span class="cv">Boost</span>
+        <span class="ck">L</span>              <span class="cv">Land / Leave planet</span>
+        <span class="ck">M</span>              <span class="cv">Galaxy Map</span>
+        <span class="ck">J</span>              <span class="cv">Jump</span>
+        <span class="ck">Space</span>          <span class="cv">Fire weapon</span>
+        <span class="ck">X</span>              <span class="cv">Fire missile</span>
+        <span class="ck">I</span>              <span class="cv">Commander Status</span>
+        <span class="ck">Esc</span>            <span class="cv">Pause / Menu</span>
+      </div>
+    </div>
+
+    <button class="menu-btn credits-back-btn" id="btn-credits-back">← Back</button>
+  </div>
 </div>
 
 <!-- Pause menu -->
@@ -315,6 +342,19 @@
   </div>
   <div class="panel-body">
     <div id="landing-planets"></div>
+  </div>
+</div>
+
+<!-- Tutorial card -->
+<div id="tutorial-card" class="tutorial-card hidden">
+  <div class="tutorial-header">
+    <span id="tutorial-step-label" class="tutorial-step-label"></span>
+    <button class="tutorial-skip-btn" id="btn-tutorial-skip">Skip</button>
+  </div>
+  <div id="tutorial-title" class="tutorial-title-text"></div>
+  <div id="tutorial-body" class="tutorial-body"></div>
+  <div class="tutorial-footer">
+    <button class="tutorial-next-btn" id="btn-tutorial-next">Next →</button>
   </div>
 </div>
 

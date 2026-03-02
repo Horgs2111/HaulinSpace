@@ -1396,6 +1396,8 @@ function confirmSlotAction(slot) {
     document.getElementById('screen-menu').classList.add('hidden')
     document.getElementById('screen-gameover').classList.add('hidden')
     document.getElementById('hud').classList.remove('hidden')
+    // Returning players skip the tutorial
+    document.getElementById('tutorial-card').classList.add('hidden')
   } else {
     // newgame mode
     document.getElementById('screen-save-slots').classList.add('hidden')
@@ -1632,6 +1634,14 @@ function initMenuUI() {
     btn.addEventListener('click', () => showOptionsTab(btn.dataset.tab))
   })
 
+  // Credits
+  document.getElementById('btn-credits').onclick       = openCredits
+  document.getElementById('btn-credits-back').onclick  = closeCredits
+
+  // Tutorial card
+  document.getElementById('btn-tutorial-next').onclick = advanceTutorial
+  document.getElementById('btn-tutorial-skip').onclick = skipTutorial
+
   // Title screen: any key or click advances to menu
   document.getElementById('screen-title').addEventListener('click', showMenu)
   document.addEventListener('keydown', e => {
@@ -1696,6 +1706,20 @@ function closeOptions() {
     gameState = 'menu'
     document.getElementById('screen-menu').classList.remove('hidden')
   }
+}
+
+// ─── Credits screen ───────────────────────────────────────────────────────────
+
+function openCredits() {
+  gameState = 'credits'
+  document.getElementById('screen-menu').classList.add('hidden')
+  document.getElementById('screen-credits').classList.remove('hidden')
+}
+
+function closeCredits() {
+  gameState = 'menu'
+  document.getElementById('screen-credits').classList.add('hidden')
+  document.getElementById('screen-menu').classList.remove('hidden')
 }
 
 initMenuUI()
