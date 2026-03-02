@@ -2753,12 +2753,15 @@ function updateMissileHUD() {
     w === 'Missile Launcher' || w === 'Rocket Launcher' || w === 'Special Weapon Launcher')
   if (!hasAnyLauncher) { section.style.display = 'none'; return }
   section.style.display = ''
-  const ammoType = getSelectedAmmo()
-  const typeEl   = document.getElementById('sp-missile-type')
-  const countEl  = document.getElementById('sp-missile-count')
-  if (ammoType) {
-    const count = player.ammoInventory?.[ammoType] ?? 0
-    if (typeEl)  typeEl.innerText  = AMMO_LABEL[ammoType] ?? ammoType
+  // Show the pinned selection if valid; fall back to auto-select
+  const available = getAvailableAmmoTypes()
+  const pinned    = player.selectedAmmoType
+  const display   = (pinned && available.includes(pinned)) ? pinned : getSelectedAmmo()
+  const typeEl    = document.getElementById('sp-missile-type')
+  const countEl   = document.getElementById('sp-missile-count')
+  if (display) {
+    const count = player.ammoInventory?.[display] ?? 0
+    if (typeEl)  typeEl.innerText  = AMMO_LABEL[display] ?? display
     if (countEl) {
       countEl.innerText = count
       countEl.className = 'sp-val' + (count === 0 ? ' sp-val-empty' : '')
