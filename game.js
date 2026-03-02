@@ -20,8 +20,15 @@ const DEFAULT_KEYBINDS = {
   map:       'm',
   jump:      'j',
   fire:      ' ',
+  boost:     'Shift',
+  info:      'i',
   pause:     'Escape'
 }
+
+const BOOST_DURATION = 3    // seconds boost lasts
+const BOOST_COOLDOWN = 7    // seconds before boost is available again
+const BOOST_ACCEL    = 3.0  // acceleration multiplier during boost
+const BOOST_VMAX     = 2.5  // top speed multiplier during boost
 
 let keybinds = { ...DEFAULT_KEYBINDS }
 
@@ -67,6 +74,15 @@ function handleActionKey(key) {
     return
   }
 
+  // M while map open — close it (checked before paused guard since map sets paused)
+  if (matchKey(key, keybinds.map) && galaxyMapOpen) { closeGalaxyMap(); return }
+
+  // I — commander status panel (toggle; works while paused too)
+  if (matchKey(key, keybinds.info) && !galaxyMapOpen) {
+    if (activePanel === 'panel-playerinfo') { closePanel(); return }
+    if (!activePanel) { openPlayerInfo(); return }
+  }
+
   if (paused) return
 
   // L — land
@@ -80,6 +96,17 @@ function handleActionKey(key) {
   // M — toggle galaxy map
   if (matchKey(key, keybinds.map) && !activePanel) {
     galaxyMapOpen ? closeGalaxyMap() : openGalaxyMap()
+  }
+
+  // Shift — boost
+  if (matchKey(key, keybinds.boost) && !activePanel && !galaxyMapOpen &&
+      !player.landedPlanet && boostTimer <= 0 && boostCooldown <= 0) {
+    const fuel = player.fuel ?? player.ship.fuel_capacity
+    if (fuel > 0) {
+      player.fuel = fuel - 1
+      boostTimer  = BOOST_DURATION
+      updateFuelHUD()
+    }
   }
 
   // Space — fire weapon
@@ -137,6 +164,7 @@ let hoveredSystem = null
 function openGalaxyMap() {
   if (activePanel || jumpState) return
   galaxyMapOpen = true
+  paused = true
   document.getElementById('overlay-map').classList.remove('hidden')
   // Auto-centre on current system
   const sys = galaxy.systems[player.system]
@@ -147,6 +175,7 @@ function openGalaxyMap() {
 
 function closeGalaxyMap() {
   galaxyMapOpen = false
+  paused = false
   document.getElementById('overlay-map').classList.add('hidden')
 }
 
@@ -200,6 +229,13 @@ let eventAlert   = null    // { title, desc, timer } — big event banner
 let particles    = []      // { x, y, vx, vy, life, maxLife, color, size }
 let nebulaFields = []      // { x, y, radius, hue } — galaxy map nebula clouds
 let wasThrusting = false   // for thrust audio toggle
+
+// ── Phase 21 — QoL ────────────────────────────────────────────────────────────
+let autopilot            = null             // planet object (with .sx,.sy) when autopilot active
+let priceHistory         = new Map()        // 'planetId:commodityId' → [last 5 buy prices]
+let missionCompleteQueue = []               // missions awaiting collect-reward popup
+let boostTimer           = 0               // seconds remaining on active boost
+let boostCooldown        = 0               // seconds until boost is available again
 
 // Pre-generated star positions for warp animation (lateral-scroll design)
 const WARP_STARS = []
@@ -353,9 +389,18 @@ function drawTitleBackground() {
 function updatePhysics(dt) {
   if (dt === 0 || activePanel || player.landedPlanet || galaxyMapOpen || paused) return
 
+  // Boost timers
+  if (boostTimer > 0) {
+    boostTimer -= dt
+    if (boostTimer <= 0) { boostTimer = 0; boostCooldown = BOOST_COOLDOWN }
+  } else if (boostCooldown > 0) {
+    boostCooldown = Math.max(0, boostCooldown - dt)
+  }
+  const boosting = boostTimer > 0
+
   const TURN  = player.ship.turn_rate * 25 * Math.PI / 180
-  const ACCEL = player.ship.speed     * 20
-  const VMAX  = player.ship.speed     * 30
+  const ACCEL = player.ship.speed     * 20 * (boosting ? BOOST_ACCEL : 1)
+  const VMAX  = player.ship.speed     * 30 * (boosting ? BOOST_VMAX  : 1)
   const DAMP  = Math.exp(-dt / (player.ship.inertia / 3))
 
   if (isKeyHeld(keybinds.turnLeft))  player.angle -= TURN * dt
@@ -367,6 +412,36 @@ function updatePhysics(dt) {
   if (isKeyHeld(keybinds.brake)) {
     player.vx -= Math.cos(player.angle) * ACCEL * 0.6 * dt
     player.vy -= Math.sin(player.angle) * ACCEL * 0.6 * dt
+  }
+
+  // Autopilot — cancel on manual input
+  if (autopilot && (isKeyHeld(keybinds.thrust) || isKeyHeld(keybinds.brake) ||
+      isKeyHeld(keybinds.turnLeft) || isKeyHeld(keybinds.turnRight))) {
+    autopilot = null
+  }
+
+  // Autopilot steering
+  if (autopilot) {
+    const dx   = autopilot.sx - player.x
+    const dy   = autopilot.sy - player.y
+    const dist = Math.hypot(dx, dy)
+    if (dist < LAND_RADIUS) {
+      const ap = autopilot; autopilot = null
+      player.vx = 0; player.vy = 0
+      player.landedPlanet = ap
+      openLanding(ap)
+    } else {
+      const targetAngle = Math.atan2(dy, dx)
+      let   diff        = targetAngle - player.angle
+      while (diff >  Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      if (Math.abs(diff) > 0.08) {
+        player.angle += Math.sign(diff) * Math.min(TURN * dt, Math.abs(diff))
+      } else {
+        player.vx += Math.cos(player.angle) * ACCEL * dt
+        player.vy += Math.sin(player.angle) * ACCEL * dt
+      }
+    }
   }
 
   const spd = Math.hypot(player.vx, player.vy)
@@ -442,27 +517,36 @@ function drawSystemView() {
   drawCombatHUD()
   drawEventLog()
   drawSystemHUD()
+  drawMinimap()
 }
 
 function drawShip(wx, wy, angle) {
   const thrusting = !player.landedPlanet && !activePanel && (keys['w'] || keys['W'] || keys['s'] || keys['S'])
+  const boosting  = boostTimer > 0
   ctx.save()
   ctx.translate(wx, wy)
   ctx.rotate(angle)
 
-  if (thrusting) {
+  if (thrusting || boosting) {
     ctx.save()
-    ctx.shadowColor = 'rgba(80,160,255,0.9)'; ctx.shadowBlur = 22
-    ctx.fillStyle   = 'rgba(100,185,255,0.75)'
+    if (boosting) {
+      ctx.shadowColor = 'rgba(255,140,30,0.95)'; ctx.shadowBlur = 34
+      ctx.fillStyle   = 'rgba(255,180,60,0.90)'
+    } else {
+      ctx.shadowColor = 'rgba(80,160,255,0.9)'; ctx.shadowBlur = 22
+      ctx.fillStyle   = 'rgba(100,185,255,0.75)'
+    }
+    const flameLen = boosting ? 26 : 18
     ctx.beginPath()
-    ctx.moveTo(-7, 0); ctx.lineTo(-18, -6); ctx.lineTo(-18, 6)
+    ctx.moveTo(-7, 0); ctx.lineTo(-flameLen, -6); ctx.lineTo(-flameLen, 6)
     ctx.closePath(); ctx.fill()
     ctx.restore()
-    // Emit thrust particles from engine nozzle position
-    if (Math.random() < 0.7) {
-      const nozzleX = wx + Math.cos(angle + Math.PI) * 8
-      const nozzleY = wy + Math.sin(angle + Math.PI) * 8
-      spawnParticles(nozzleX, nozzleY, player.vx, player.vy, 'thrust', 1)
+    // Emit thrust particles from engine nozzle
+    const nozzleX = wx + Math.cos(angle + Math.PI) * 8
+    const nozzleY = wy + Math.sin(angle + Math.PI) * 8
+    const spawnChance = boosting ? 1.0 : 0.7
+    if (Math.random() < spawnChance) {
+      spawnParticles(nozzleX, nozzleY, player.vx, player.vy, boosting ? 'boost' : 'thrust', boosting ? 3 : 1)
     }
   }
 
@@ -482,6 +566,23 @@ function drawSystemHUD() {
   ctx.font = '11px Arial'; ctx.fillStyle = 'rgba(65,105,165,0.75)'; ctx.textAlign = 'left'
   ctx.fillText(`SPD  ${Math.round(speed).toString().padStart(3)}`,  18, canvas.height - 28)
   ctx.fillText(`HDG  ${Math.round(hdg).toString().padStart(3)}°`,   18, canvas.height - 14)
+  ctx.restore()
+
+  // Boost indicator
+  ctx.save()
+  ctx.font = '11px Arial'; ctx.textAlign = 'left'
+  if (boostTimer > 0) {
+    const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 1000 * 8)
+    ctx.fillStyle = `rgba(255,160,40,${pulse})`
+    ctx.shadowColor = 'rgba(255,120,20,0.6)'; ctx.shadowBlur = 8
+    ctx.fillText(`BOOST  ${boostTimer.toFixed(1)}s`, 18, canvas.height - 48)
+  } else if (boostCooldown > 0) {
+    ctx.fillStyle = 'rgba(100,80,50,0.70)'
+    ctx.fillText(`BOOST  ${boostCooldown.toFixed(1)}s`, 18, canvas.height - 48)
+  } else {
+    ctx.fillStyle = 'rgba(65,105,165,0.55)'
+    ctx.fillText('BOOST  [Shift]', 18, canvas.height - 48)
+  }
   ctx.restore()
 
   // Landing prompt (pulsing)
@@ -513,6 +614,85 @@ function drawSystemHUD() {
     ctx.shadowColor = missionNotify.success ? 'rgba(60,200,100,0.5)'       : 'rgba(200,60,50,0.5)'
     ctx.shadowBlur  = 8; ctx.textAlign = 'center'
     ctx.fillText(missionNotify.text, canvas.width / 2, 116)
+    ctx.restore()
+  }
+}
+
+// ─── Minimap ──────────────────────────────────────────────────────────────────
+
+function drawMinimap() {
+  if (!systemLayout || gameState !== 'playing' || activePanel || jumpState || paused) return
+  const cx    = 85
+  const cy    = 44 + 85   // below the 44px HUD strip
+  const R     = 65
+  const RANGE = 600
+  const scale = R / RANGE
+
+  ctx.save()
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(0,4,18,0.72)'; ctx.fill()
+  ctx.strokeStyle = 'rgba(40,80,160,0.50)'; ctx.lineWidth = 1.5; ctx.stroke()
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip()
+
+  // Planets
+  for (const p of systemLayout.planets) {
+    const rx = (p.sx - player.x) * scale
+    const ry = (p.sy - player.y) * scale
+    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 4, 0, Math.PI * 2)
+    ctx.fillStyle = p === autopilot ? '#88ccff' : '#4488cc'
+    ctx.fill()
+    if (p === autopilot) {
+      ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 7, 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(100,220,140,0.75)'; ctx.lineWidth = 1; ctx.stroke()
+    }
+  }
+
+  // NPC traders (docked in current system)
+  for (const t of npcTraders) {
+    if (t.system !== player.system || t.state !== 'docked') continue
+    const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
+    if (!lp) continue
+    const r  = 38 + (t.id % 5) * 8
+    const tx = lp.sx + Math.cos(t.orbitAngle) * r
+    const ty = lp.sy + Math.sin(t.orbitAngle) * r
+    const rx = (tx - player.x) * scale
+    const ry = (ty - player.y) * scale
+    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
+    ctx.fillStyle = '#3ec8b8'; ctx.fill()
+  }
+
+  // Loot
+  for (const l of lootItems) {
+    const rx = (l.x - player.x) * scale
+    const ry = (l.y - player.y) * scale
+    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffdd44'; ctx.fill()
+  }
+
+  // Enemies
+  for (const en of enemies) {
+    const rx = (en.x - player.x) * scale
+    const ry = (en.y - player.y) * scale
+    ctx.beginPath(); ctx.arc(cx + rx, cy + ry, 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#ff4444'; ctx.fill()
+  }
+
+  // Player direction line + dot
+  ctx.beginPath()
+  ctx.moveTo(cx, cy)
+  ctx.lineTo(cx + Math.cos(player.angle) * 9, cy + Math.sin(player.angle) * 9)
+  ctx.strokeStyle = '#aaddff'; ctx.lineWidth = 1.5; ctx.stroke()
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'; ctx.fill()
+
+  ctx.restore()
+
+  // Autopilot label below the minimap circle
+  if (autopilot) {
+    ctx.save()
+    ctx.font = '9px Arial'; ctx.fillStyle = 'rgba(100,220,140,0.70)'
+    ctx.textAlign = 'center'
+    ctx.fillText('AUTOPILOT \u00b7 ' + autopilot.name, cx, cy + R + 12)
     ctx.restore()
   }
 }
@@ -644,12 +824,29 @@ function drawGalaxyMapOverlay() {
   ctx.setTransform(viewScale, 0, 0, viewScale, viewOffsetX, viewOffsetY)
   drawNebulaFields()
   drawConnections()
+  drawJumpTargetLine()
   drawSystems()
   ctx.restore()
 
   // Screen-space overlays
   if (hoveredSystem && hoveredSystem.id !== player.system) drawTooltip(hoveredSystem)
   drawZoomLabel()
+}
+
+function drawJumpTargetLine() {
+  if (!jumpTarget) return
+  const current = galaxy.systems[player.system]
+  const target  = galaxy.systems[jumpTarget]
+  if (!target) return
+  const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 1000 * 2.8)
+  ctx.save()
+  ctx.shadowColor = 'rgba(80, 190, 255, 0.70)'
+  ctx.shadowBlur  = 10
+  ctx.strokeStyle = `rgba(100, 200, 255, ${0.50 + pulse * 0.38})`
+  ctx.lineWidth   = 2
+  ctx.beginPath(); ctx.moveTo(current.x, current.y); ctx.lineTo(target.x, target.y)
+  ctx.stroke()
+  ctx.restore()
 }
 
 function drawConnections() {
@@ -678,9 +875,18 @@ function drawConnections() {
         strokeStyle = 'rgba(70,110,210,0.18)'
       }
 
+      const isPlayerLane = sys.id === player.system || targetId === player.system
       ctx.save()
       ctx.beginPath(); ctx.moveTo(sys.x, sys.y); ctx.lineTo(target.x, target.y)
-      ctx.strokeStyle = strokeStyle; ctx.lineWidth = 1
+      if (isPlayerLane) {
+        ctx.strokeStyle = strokeStyle instanceof CanvasGradient
+          ? strokeStyle
+          : strokeStyle.replace(/[\d.]+\)$/, '0.55)')
+        ctx.lineWidth   = 1.5
+        ctx.shadowColor = 'rgba(100,160,255,0.25)'; ctx.shadowBlur = 6
+      } else {
+        ctx.strokeStyle = strokeStyle; ctx.lineWidth = 1
+      }
       ctx.stroke(); ctx.restore()
     }
   }
@@ -734,11 +940,12 @@ function drawSystems() {
       ctx.restore()
     }
 
-    // Hover ring
+    // Hover ring — green tint if jumpable, red tint if out of range or blocked
     if (hovered && !isPlayer) {
-      ctx.shadowColor = isReachable ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)'
+      const jumpable = current.connections.includes(sys.id) && !isSystemBlocked(sys.id)
+      ctx.shadowColor = jumpable ? 'rgba(100,255,160,0.7)' : 'rgba(255,80,80,0.35)'
       ctx.shadowBlur  = 14
-      ctx.strokeStyle = isReachable ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.22)'
+      ctx.strokeStyle = jumpable ? 'rgba(100,255,160,0.65)' : 'rgba(220,80,80,0.30)'
       ctx.lineWidth   = 1
       ctx.beginPath(); ctx.arc(sys.x, sys.y, 10, 0, Math.PI * 2); ctx.stroke()
     }
@@ -773,6 +980,18 @@ function drawSystems() {
       ctx.restore()
     }
 
+    // Mission target marker — pulsing ring around the system node
+    const sysMissions = (player?.missions ?? []).filter(m => m.target?.systemId === sys.id)
+    if (sysMissions.length > 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(time * 3.5)
+      ctx.save()
+      ctx.shadowColor = 'rgba(255,70,70,0.80)'; ctx.shadowBlur = 12
+      ctx.strokeStyle = `rgba(255,80,80,${0.50 + pulse * 0.40})`
+      ctx.lineWidth   = 1.5
+      ctx.beginPath(); ctx.arc(sys.x, sys.y, 10 + pulse * 2, 0, Math.PI * 2); ctx.stroke()
+      ctx.restore()
+    }
+
     ctx.restore()
   }
 
@@ -802,9 +1021,33 @@ function drawTooltip(sys) {
     lines.push('Unknown system')
   }
 
-  if (isSystemBlocked(sys.id)) lines.push('⚠ Jump blocked — Supernova Warning')
+  const current = galaxy.systems[player.system]
+  if (!current.connections.includes(sys.id)) {
+    lines.push('Not in jump range — travel closer first')
+  } else if (isSystemBlocked(sys.id)) {
+    lines.push('⚠ Jump blocked — Supernova Warning')
+  }
 
-  const pad = 9, lh = 17, w = 175, h = lines.length * lh + pad * 2
+  // Facility summary for visited systems
+  if (state === 'visited' && sys.planets.length > 0) {
+    const FAC_LABELS = { market:'Market', blackMarket:'Black Market', shipyard:'Shipyard',
+                         upgradeShop:'Upgrades', missionBoard:'Missions', observatory:'Observatory', fuel:'Refuel' }
+    for (const planet of sys.planets) {
+      const avail = Object.keys(FAC_LABELS).filter(k => planet[k])
+      if (avail.length > 0) {
+        lines.push(`${planet.name}: ${avail.map(k => FAC_LABELS[k]).join(' · ')}`)
+      }
+    }
+  }
+
+  // Active missions targeting this system
+  const sysMissions = (player?.missions ?? []).filter(m => m.target?.systemId === sys.id)
+  if (sysMissions.length > 0) {
+    lines.push('─────────────────')
+    for (const m of sysMissions) lines.push('▶ ' + m.title)
+  }
+
+  const pad = 9, lh = 17, w = 260, h = lines.length * lh + pad * 2
   let tx = mouseScreenX + 16, ty = mouseScreenY - h / 2
   if (tx + w > canvas.width  - 8) tx = mouseScreenX - w - 10
   if (ty < 8)                      ty = 8
@@ -817,9 +1060,14 @@ function drawTooltip(sys) {
   ctx.shadowBlur = 0
   ctx.font = 'bold 13px Arial'; ctx.fillStyle = '#ddeeff'
   ctx.fillText(lines[0], tx + pad, ty + pad + 13)
-  ctx.font = '12px Arial'; ctx.fillStyle = '#8899bb'
-  for (let i = 1; i < lines.length; i++)
-    ctx.fillText(lines[i], tx + pad, ty + pad + 13 + i * lh)
+  ctx.font = '12px Arial'
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.startsWith('▶ '))       ctx.fillStyle = '#ff8888'
+    else if (line.startsWith('───')) ctx.fillStyle = 'rgba(180,100,100,0.35)'
+    else                             ctx.fillStyle = '#8899bb'
+    ctx.fillText(line, tx + pad, ty + pad + 13 + i * lh)
+  }
   ctx.restore()
 }
 
@@ -1427,6 +1675,12 @@ function spawnParticles(wx, wy, baseVx, baseVy, type, count) {
       p.life    = 0.55 + Math.random() * 0.85
       p.color   = spd < 0.5 ? '#ff8822' : (Math.random() < 0.5 ? '#ffdd33' : '#ff4422')
       p.size    = 2.5 + Math.random() * 5.5
+    } else if (type === 'boost') {
+      p.vx      = baseVx * 0.15 - Math.cos(player.angle) * (80 + Math.random() * 140) + (Math.random() - 0.5) * 50
+      p.vy      = baseVy * 0.15 - Math.sin(player.angle) * (80 + Math.random() * 140) + (Math.random() - 0.5) * 50
+      p.life    = 0.18 + Math.random() * 0.22
+      p.color   = Math.random() < 0.5 ? '#ffaa33' : (Math.random() < 0.5 ? '#ffdd66' : '#ff6622')
+      p.size    = 2.0 + Math.random() * 2.5
     }
 
     p.maxLife = p.life
@@ -1567,31 +1821,35 @@ canvas.addEventListener('mouseleave', ()  => { isPanning = false })
 
 canvas.addEventListener('click', e => {
   if (panMoved) { panMoved = false; return }
-  // Left-click in system view fires weapon
+  // Left-click in system view: click planet → autopilot, click space → fire weapon
   if (!galaxyMapOpen && gameState === 'playing' && !activePanel && !jumpState && !paused) {
-    firePlayerWeapon()
+    const rect = canvas.getBoundingClientRect()
+    const camX = canvas.width  / 2 - player.x
+    const camY = canvas.height / 2 - player.y
+    const wx   = e.clientX - rect.left - camX
+    const wy   = e.clientY - rect.top  - camY
+    let clickedPlanet = null
+    for (const p of (systemLayout?.planets ?? [])) {
+      if (Math.hypot(wx - p.sx, wy - p.sy) < 22) { clickedPlanet = p; break }
+    }
+    if (clickedPlanet) {
+      autopilot = (autopilot === clickedPlanet) ? null : clickedPlanet
+    }
     return
   }
   if (!galaxyMapOpen || activePanel) return
 
-  const rect = canvas.getBoundingClientRect()
-  const w    = toWorld(e.clientX - rect.left, e.clientY - rect.top)
-  const hitR = 14 / viewScale
+  // Use hoveredSystem (set each draw frame) so click always acts on the same
+  // system the cursor and hover ring are highlighting — avoids first-vs-last
+  // mismatch when two nodes overlap the hit radius.
+  const sys = hoveredSystem
+  if (!sys || sys.id === player.system) return
   const current = galaxy.systems[player.system]
-
-  for (const sys of galaxy.systems) {
-    const dx = sys.x - w.x, dy = sys.y - w.y
-    if (dx * dx + dy * dy < hitR * hitR) {
-      // Toggle jump target on connected, visited systems (not current)
-      if (sys.id !== player.system &&
-          systemStates.has(sys.id) &&
-          current.connections.includes(sys.id) &&
-          !isSystemBlocked(sys.id)) {
-        jumpTarget = (jumpTarget === sys.id) ? null : sys.id
-        updateJumpHUD()
-      }
-      break
-    }
+  if (systemStates.has(sys.id) &&
+      current.connections.includes(sys.id) &&
+      !isSystemBlocked(sys.id)) {
+    jumpTarget = (jumpTarget === sys.id) ? null : sys.id
+    updateJumpHUD()
   }
 })
 
@@ -1616,8 +1874,10 @@ function fireRandomEvent() {
   let alertDesc = ''
 
   if (def.effect === 'system_unreachable') {
+    const missionTargets = new Set((player.missions ?? []).map(m => m.target?.systemId))
     const candidates = galaxy.systems.filter(s =>
-      s.id !== player.system && systemStates.has(s.id) && !isSystemBlocked(s.id))
+      s.id !== player.system && systemStates.has(s.id) && !isSystemBlocked(s.id) &&
+      !missionTargets.has(s.id))
     if (!candidates.length) { nextEventAt = jumpCount + 3; return }
     const target   = candidates[Math.floor(Math.random() * candidates.length)]
     ev.systemId    = target.id
@@ -1660,6 +1920,8 @@ function initGame() {
   nextEventAt   = 4 + Math.floor(Math.random() * 4)
   activeEvents  = []
   eventAlert    = null
+  autopilot     = null
+  priceHistory  = new Map()
 
   setSystemState(0, 'visited')
   galaxy.systems[0].connections.forEach(id => setSystemState(id, 'discovered'))
@@ -1675,6 +1937,8 @@ function initGame() {
     ship:         Object.assign({}, GAME_SHIPS[0]),
     credits:      1000,
     cargo:        {},
+    cargoPrices:  {},
+    missionCargo: {},
     hp:           GAME_SHIPS[0].hull,
     fuel:         GAME_SHIPS[0].fuel_capacity,
     upgrades:     [],
@@ -1704,6 +1968,19 @@ function setSystemState(id, state) {
   systemStates.set(id, state)
 }
 
+// Remove mission cargo from player hold + missionCargo tracking
+function removeMissionCargo(m) {
+  if (!m.commodityId || !m.cargoQty) return
+  if (player.cargo[m.commodityId]) {
+    player.cargo[m.commodityId] = Math.max(0, player.cargo[m.commodityId] - m.cargoQty)
+    if (player.cargo[m.commodityId] === 0) delete player.cargo[m.commodityId]
+  }
+  if (player.missionCargo?.[m.commodityId]) {
+    player.missionCargo[m.commodityId] = Math.max(0, player.missionCargo[m.commodityId] - m.cargoQty)
+    if (player.missionCargo[m.commodityId] === 0) delete player.missionCargo[m.commodityId]
+  }
+}
+
 function travel(targetId) {
   const current = galaxy.systems[player.system]
   if (!current.connections.includes(targetId)) return
@@ -1729,29 +2006,33 @@ function travel(targetId) {
     revealRadius(targetId, 2, 'scanned')
   }
 
+  autopilot = null   // planet refs are stale after system change
   buildSystemLayout(galaxy.systems[targetId])
 
   const arrivalPlanet = systemLayout.planets[0]
   player.x = arrivalPlanet ? arrivalPlanet.sx + 150 : 200
   player.y = arrivalPlanet ? arrivalPlanet.sy        : 0
-  player.vx = 0; player.vy = 0
   player.landedPlanet = null
 
+  // Arrive at max speed in the jump direction; normal inertia takes over immediately
+  const VMAX         = player.ship.speed * 30
+  const arrivalAngle = jumpState?.angle ?? player.angle
+  player.angle = arrivalAngle
+  player.vx    = Math.cos(arrivalAngle) * VMAX
+  player.vy    = Math.sin(arrivalAngle) * VMAX
+
   // ── Mission tracking ──────────────────────────────────────────────────────
+  // Completion is handled in checkMissionCompletions() when landing on a planet.
+  // Here we only handle hop-limit expiry for missions NOT targeting this system.
   if (player.missions?.length) {
     const toRemove = new Set()
     for (const m of player.missions) {
-      if (m.type === 'delivery' || m.type === 'smuggling') {
-        if (m.target.systemId === targetId) {
-          player.credits += m.reward
+      if ((m.type === 'delivery' || m.type === 'smuggling') && m.target.systemId !== targetId) {
+        m.hopsLeft--
+        if (m.hopsLeft <= 0) {
+          removeMissionCargo(m)
           toRemove.add(m.id)
-          missionNotify = { text: `${m.title}  +${m.reward.toLocaleString()} cr`, timer: 3.5, success: true }
-        } else {
-          m.hopsLeft--
-          if (m.hopsLeft <= 0) {
-            toRemove.add(m.id)
-            if (!missionNotify) missionNotify = { text: `Contract expired: ${m.title}`, timer: 3.5, success: false }
-          }
+          if (!missionNotify) missionNotify = { text: `Contract expired: ${m.title}`, timer: 3.5, success: false }
         }
       }
     }
@@ -1817,6 +2098,8 @@ function saveGame() {
         upgrades:     player.upgrades,
         credits:      player.credits,
         cargo:        player.cargo,
+        cargoPrices:  player.cargoPrices  ?? {},
+        missionCargo: player.missionCargo ?? {},
         missions:     player.missions ?? [],
         x:            player.x,
         y:            player.y,
@@ -1845,6 +2128,7 @@ function saveGame() {
       jumpCount,
       nextEventAt,
       jumpTarget,
+      priceHistory:   [...priceHistory.entries()],
       missionCounter: typeof missionCounter !== 'undefined' ? missionCounter : 0
     }
     localStorage.setItem(SAVE_KEY, JSON.stringify(data))
@@ -1888,6 +2172,8 @@ function loadGame() {
     jumpWarning   = null
     missionNotify = null
     eventAlert    = null
+    autopilot     = null
+    priceHistory  = data.priceHistory ? new Map(data.priceHistory) : new Map()
 
     // Restore missionCounter so new IDs don't collide with loaded missions
     if (typeof missionCounter !== 'undefined') {
@@ -1896,7 +2182,9 @@ function loadGame() {
 
     player        = { ...data.player, landedPlanet: null }
     // Back-compat: saves before fuel system won't have fuel field
-    if (player.fuel == null) player.fuel = player.ship.fuel_capacity ?? 6
+    if (player.fuel == null)         player.fuel         = player.ship.fuel_capacity ?? 6
+    if (!player.cargoPrices)         player.cargoPrices  = {}
+    if (!player.missionCargo)        player.missionCargo = {}
     nearPlanet    = null
     lastFrameTime = 0
     clearCombat()

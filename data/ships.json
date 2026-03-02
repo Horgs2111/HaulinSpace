@@ -14,6 +14,7 @@
     {"name":"Leviathan Freighter","tier":5,"cargo":200,"speed":2,"turn_rate":3,"inertia":10,"weapon_slots":3,"upgrade_slots":5,"price":150000},
     {"name":"Phantom Stealth","tier":5,"cargo":50,"speed":9,"turn_rate":9,"inertia":4,"weapon_slots":4,"upgrade_slots":4,"price":180000},
     {"name":"Aegis Destroyer","tier":5,"cargo":100,"speed":6,"turn_rate":5,"inertia":7,"weapon_slots":5,"upgrade_slots":5,"price":220000},
-    {"name":"Celestial Dreadnought","tier":6,"cargo":150,"speed":4,"turn_rate":4,"inertia":9,"weapon_slots":6,"upgrade_slots":6,"price":350000}
+    {"name":"Celestial Dreadnought","tier":6,"cargo":150,"speed":4,"turn_rate":4,"inertia":9,"weapon_slots":6,"upgrade_slots":6,"price":350000},
+    {"name":"Matts Ship","tier":7,"cargo":500,"speed":15,"turn_rate":10,"inertia":9,"weapon_slots":50,"upgrade_slots":50,"price":500000} 
   ]
 }

@@ -12,14 +12,18 @@ function tryConnect(a, b) {
   return true
 }
 
+const MAP_W = 3200   // galaxy world-space width
+const MAP_H = 2000   // galaxy world-space height
+const MAP_PAD = 200  // padding from edges
+
 function generateClusterCentres(count) {
   const centres = []
-  const MIN_SQ = 190 * 190
+  const MIN_SQ = 480 * 480
   let attempts = 0
 
-  while (centres.length < count && attempts < 3000) {
-    const x = 130 + Math.random() * 940
-    const y = 110 + Math.random() * 580
+  while (centres.length < count && attempts < 5000) {
+    const x = MAP_PAD + Math.random() * (MAP_W - MAP_PAD * 2)
+    const y = MAP_PAD + Math.random() * (MAP_H - MAP_PAD * 2)
     const ok = centres.every(c => sqDist(c, { x, y }) >= MIN_SQ)
     if (ok) {
       centres.push({
@@ -34,8 +38,8 @@ function generateClusterCentres(count) {
 
   while (centres.length < count) {
     centres.push({
-      x: 130 + Math.random() * 940,
-      y: 110 + Math.random() * 580,
+      x: MAP_PAD + Math.random() * (MAP_W - MAP_PAD * 2),
+      y: MAP_PAD + Math.random() * (MAP_H - MAP_PAD * 2),
       index: centres.length,
       faction: GAME_FACTIONS[centres.length % GAME_FACTIONS.length].name
     })
@@ -48,18 +52,31 @@ function generateGalaxy(count) {
   const numClusters = 8 + Math.floor(Math.random() * 5)
   const clusters = generateClusterCentres(numClusters)
 
-  // --- Systems: round-robin cluster assignment ---
+  // --- Systems: round-robin cluster assignment with minimum spacing ---
+  const MIN_SYS_SQ = 110 * 110  // minimum distance² between any two systems
   const systems = []
   for (let i = 0; i < count; i++) {
     const clusterIdx = i % numClusters
     const centre = clusters[clusterIdx]
-    const angle = Math.random() * Math.PI * 2
-    const r = 30 + Math.random() * 85
+    let x, y, placed = false
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const angle = Math.random() * Math.PI * 2
+      const r = 80 + Math.random() * 200
+      const cx = Math.max(MAP_PAD / 2, Math.min(MAP_W - MAP_PAD / 2, centre.x + Math.cos(angle) * r))
+      const cy = Math.max(MAP_PAD / 2, Math.min(MAP_H - MAP_PAD / 2, centre.y + Math.sin(angle) * r))
+      if (systems.every(s => sqDist(s, { x: cx, y: cy }) >= MIN_SYS_SQ)) {
+        x = cx; y = cy; placed = true; break
+      }
+    }
+    if (!placed) {
+      // Fallback: place at cluster centre with small jitter, ignoring spacing
+      x = Math.max(MAP_PAD / 2, Math.min(MAP_W - MAP_PAD / 2, centre.x + (Math.random() - 0.5) * 60))
+      y = Math.max(MAP_PAD / 2, Math.min(MAP_H - MAP_PAD / 2, centre.y + (Math.random() - 0.5) * 60))
+    }
     systems.push({
       id: i,
       name: SYSTEM_NAMES[i],
-      x: Math.max(50, Math.min(1150, centre.x + Math.cos(angle) * r)),
-      y: Math.max(50, Math.min(750, centre.y + Math.sin(angle) * r)),
+      x, y,
       connections: [],
       planets: [],
       faction: centre.faction,
@@ -149,7 +166,7 @@ function generateGalaxy(count) {
   }
 
   // --- Piracy levels ---
-  const gcx = 600, gcy = 400
+  const gcx = MAP_W / 2, gcy = MAP_H / 2
   const maxSqD = gcx * gcx + gcy * gcy
   for (const sys of systems) {
     const dx = sys.x - gcx, dy = sys.y - gcy

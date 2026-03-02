@@ -431,6 +431,19 @@ PHASE 19 — REMAINING CONTENT & GAMEPLAY
     - Plague Outbreak: medicine prices ×3 in affected systems for 10 jumps
     - Gold Rush: luxuries prices ×2, player tips about a specific rich system
 
+[x] Player info panel (I key)
+    - Full-screen panel showing ship stats, hull/HP, fitted upgrades, active missions, cargo summary
+    - Credits, cargo used/free, upgrade slots used/remaining
+    - Accessible via I key or pause menu
+
+[x] Upgrade shop improvements
+    - Unique upgrades (Targeting Computer, Scanner, etc.) show "✓ Fitted" when installed — not purchasable again
+    - Stackable upgrades show "Fitted ×N" count badge
+    - Hover tooltip on each upgrade row showing stat change and slot cost
+
+[x] Galaxy map facility indicators
+    - Tooltip for visited systems lists available facilities per planet (Market, Shipyard, Refuel, etc.)
+
 [ ] Difficulty settings (New Game screen)
     - Easy / Normal / Hard — affects starting credits, piracy rates, combat damage
 
@@ -489,20 +502,23 @@ options screen.
 PHASE 21 — QUALITY OF LIFE
 ===========================================
 
-[ ] Minimap
+[x] Minimap
     - Small always-visible radar in bottom-right showing nearby planets + enemies
     - Blips colour-coded: blue = planet, red = enemy, teal = NPC trader, yellow = loot
+    - Autopilot target highlighted with green ring on minimap
 
-[ ] Autopilot / waypoint
+[x] Autopilot / waypoint
     - Click a planet on screen to set it as a waypoint; ship auto-flies toward it
-    - Player can interrupt autopilot at any time
+    - Player can interrupt autopilot at any time with any WASD key
+    - Auto-lands on arrival; autopilot label shown above minimap
 
-[ ] Market price history
-    - Track last 5 buy prices per commodity per planet
-    - Show trend arrow (↑↓) next to price in market panel
+[x] Market price history
+    - Track last 5 buy prices per commodity per planet (priceHistory Map in game.js)
+    - Trend arrow (↑↓→) next to buy price in market panel
 
-[ ] Cargo manifest panel
-    - Dedicated screen showing full cargo contents, average buy price paid, estimated sell value
+[x] Cargo manifest panel
+    - Dedicated screen (panel-cargo) showing full cargo contents, average buy price paid, estimated sell value
+    - Accessible via "Cargo Manifest" button in the pause menu
 
 [ ] Keybinding reference overlay
     - Removed — replaced by full keybindings editor in Phase 20 Options screen

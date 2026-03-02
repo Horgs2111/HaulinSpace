@@ -13,7 +13,8 @@ const GAME_SHIPS = [
   { name:'Leviathan Freighter',  tier:5, cargo:200, hull:220, speed:2,  turn_rate:3,  inertia:10, weapon_slots:3, upgrade_slots:5, price:150000, fuel_capacity:14 },
   { name:'Phantom Stealth',      tier:5, cargo:50,  hull:170, speed:9,  turn_rate:9,  inertia:4,  weapon_slots:4, upgrade_slots:4, price:180000, fuel_capacity:14 },
   { name:'Aegis Destroyer',      tier:5, cargo:100, hull:260, speed:6,  turn_rate:5,  inertia:7,  weapon_slots:5, upgrade_slots:5, price:220000, fuel_capacity:14 },
-  { name:'Celestial Dreadnought',tier:6, cargo:150, hull:350, speed:4,  turn_rate:4,  inertia:9,  weapon_slots:6, upgrade_slots:6, price:350000, fuel_capacity:16 }
+  { name:'Celestial Dreadnought',tier:6, cargo:150, hull:350, speed:4,  turn_rate:4,  inertia:9,  weapon_slots:6, upgrade_slots:6, price:350000, fuel_capacity:16 },
+  { name:'Matts Ship',           tier:7, cargo:500, hull:9999,speed:15, turn_rate:10, inertia:9,  weapon_slots:50,upgrade_slots:50,price:500000, fuel_capacity:16 }
 ]
 
 const GAME_COMMODITIES = [
@@ -45,15 +46,15 @@ const GAME_EVENTS = [
 ]
 
 const GAME_UPGRADES = [
-  { name:'Cargo Expansion',           effect:'cargo',          delta:20,   price:5000  },
-  { name:'Improved Thrusters',        effect:'speed',          delta:1,    price:8000  },
-  { name:'Advanced Maneuvering Jets', effect:'turn_rate',      delta:1,    price:7000  },
-  { name:'Inertia Dampeners',         effect:'inertia',        delta:-1,   price:6000  },
-  { name:'Shield Generator',          effect:'hull',           delta:50,   price:10000 },
-  { name:'Targeting Computer',        effect:'damage_pct',     delta:0.10, price:12000 },
-  { name:'Fuel Efficiency Module',    effect:'jump_cost',      delta:-0.20,price:9000  },
-  { name:'Long-range Scanner',        effect:'scanner_radius', delta:2,    price:15000 },
-  { name:'Auto Refueler',             effect:'auto_refuel',    delta:0,    price:11000 }
+  { name:'Cargo Expansion',           effect:'cargo',          delta:20,    price:5000,  unique:false },
+  { name:'Improved Thrusters',        effect:'speed',          delta:1,     price:8000,  unique:false },
+  { name:'Advanced Maneuvering Jets', effect:'turn_rate',      delta:1,     price:7000,  unique:false },
+  { name:'Inertia Dampeners',         effect:'inertia',        delta:-1,    price:6000,  unique:false },
+  { name:'Shield Generator',          effect:'hull',           delta:50,    price:10000, unique:false },
+  { name:'Targeting Computer',        effect:'damage_pct',     delta:0.10,  price:12000, unique:true  },
+  { name:'Fuel Efficiency Module',    effect:'jump_cost',      delta:-0.20, price:9000,  unique:true  },
+  { name:'Long-range Scanner',        effect:'scanner_radius', delta:2,     price:15000, unique:true  },
+  { name:'Auto Refueler',             effect:'auto_refuel',    delta:0,     price:11000, unique:true  }
 ]
 
 // Weighted: agricultural 25%, mining 20%, industrial 15%, trade_hub 12%, military 13%, frontier 15%

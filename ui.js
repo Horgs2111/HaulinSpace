@@ -121,6 +121,9 @@ function openLanding(specificPlanet) {
   AudioEngine.dock()
   AudioEngine.stopThrust()
   AudioEngine.pauseMusic()
+
+  // Show mission-complete popups for any missions targeting this system
+  if (specificPlanet) checkMissionCompletions()
 }
 
 function buildPlanetBlock(planet) {
@@ -296,7 +299,18 @@ function renderMarket() {
     if (stocked) {
       const ratio = effBuy / c.base_price
       const cls   = ratio < 0.85 ? 'price-cheap' : ratio > 1.20 ? 'price-dear' : 'price-normal'
-      buyHtml = `<span class="${cls}">${effBuy.toLocaleString()} cr</span>`
+      // Trend arrow vs purchase history at this planet
+      let trend = ''
+      if (typeof priceHistory !== 'undefined' && currentPlanet) {
+        const hist = priceHistory.get(`${currentPlanet.id}:${c.id}`)
+        if (hist && hist.length >= 1) {
+          const avg = hist.reduce((a, b) => a + b, 0) / hist.length
+          if      (effBuy > avg * 1.05) trend = ' <span class="price-trend-up">\u2191</span>'
+          else if (effBuy < avg * 0.95) trend = ' <span class="price-trend-dn">\u2193</span>'
+          else                          trend = ' <span class="price-trend-flat">\u2192</span>'
+        }
+      }
+      buyHtml = `<span class="${cls}">${effBuy.toLocaleString()} cr${trend}</span>`
     }
 
     const sellHtml = stocked
@@ -325,8 +339,23 @@ function renderMarket() {
 
 function buyItem(commodityId, price) {
   if (!currentMarket?.[commodityId]) return
-  const p = price ?? Math.max(1, Math.round(currentMarket[commodityId].buy * getEventModifier(commodityId)))
+  const p      = price ?? Math.max(1, Math.round(currentMarket[commodityId].buy * getEventModifier(commodityId)))
+  const oldQty = player.cargo[commodityId] ?? 0
   if (buyCommodity(player, commodityId, p)) {
+    // Price history for trend arrows
+    if (typeof priceHistory !== 'undefined' && currentPlanet) {
+      const hKey = `${currentPlanet.id}:${commodityId}`
+      const hist = priceHistory.get(hKey) ?? []
+      hist.push(p)
+      if (hist.length > 5) hist.shift()
+      priceHistory.set(hKey, hist)
+    }
+    // Rolling avg buy price for cargo manifest
+    if (!player.cargoPrices) player.cargoPrices = {}
+    const oldAvg = player.cargoPrices[commodityId] ?? p
+    player.cargoPrices[commodityId] = oldQty === 0
+      ? p
+      : Math.round((oldAvg * oldQty + p) / (oldQty + 1))
     AudioEngine.trade()
     updateHUD()
     renderMarket()
@@ -337,10 +366,72 @@ function sellItem(commodityId, price) {
   if (!currentMarket?.[commodityId]) return
   const p = price ?? Math.max(1, Math.round(currentMarket[commodityId].sell * getEventModifier(commodityId)))
   if (sellCommodity(player, commodityId, p)) {
+    if ((player.cargo[commodityId] ?? 0) === 0 && player.cargoPrices) {
+      delete player.cargoPrices[commodityId]
+    }
     AudioEngine.trade()
     updateHUD()
     renderMarket()
   }
+}
+
+// ─── Cargo manifest ──────────────────────────────────────────────────────────
+
+function openCargoManifest() {
+  document.getElementById('cargo-credits').innerText = player.credits.toLocaleString() + ' cr'
+  renderCargoManifest()
+  showPanel('panel-cargo')
+}
+
+function renderCargoManifest() {
+  const el = document.getElementById('cargo-manifest-body')
+  if (!el) return
+  const cargoIds = Object.keys(player.cargo).filter(id => (player.cargo[id] ?? 0) > 0)
+
+  if (!cargoIds.length) {
+    el.innerHTML = '<div class="cargo-empty">Cargo hold is empty.</div>'
+    return
+  }
+
+  let html = '<div class="cargo-table">' +
+    '<div class="cargo-header">' +
+      '<div>Commodity</div><div>Qty</div><div>Avg Paid</div><div>Total Paid</div><div>Est. Sell</div>' +
+    '</div>'
+
+  let grandPaid = 0
+  let grandSell = 0
+
+  for (const id of cargoIds) {
+    const qty = player.cargo[id]
+    const com = GAME_COMMODITIES.find(c => c.id === id)
+    if (!com) continue
+    const avgPaid  = player.cargoPrices?.[id] ?? com.base_price
+    const totalP   = avgPaid * qty
+    const sellEst  = Math.round(com.base_price * 0.88)
+    const totalSE  = sellEst * qty
+    grandPaid     += totalP
+    grandSell     += totalSE
+
+    const missionQty = player.missionCargo?.[id] ?? 0
+    html += `<div class="cargo-row">` +
+      `<div class="cargo-name">${com.label}` +
+        (com.illegal ? ' <span class="illegal-badge">ILLEGAL</span>' : '') +
+        (missionQty > 0 ? ` <span class="mission-badge">MISSION ×${missionQty}</span>` : '') +
+      `</div>` +
+      `<div class="cargo-num">${qty}</div>` +
+      `<div class="cargo-num">${avgPaid.toLocaleString()} cr</div>` +
+      `<div class="cargo-num">${totalP.toLocaleString()} cr</div>` +
+      `<div class="cargo-num cargo-sellest">${totalSE.toLocaleString()} cr</div>` +
+    `</div>`
+  }
+
+  html += '</div>' +
+    '<div class="cargo-totals">' +
+      `<span>Total invested: <strong>${grandPaid.toLocaleString()} cr</strong></span>` +
+      `<span>Est. sell value: <strong>${grandSell.toLocaleString()} cr</strong></span>` +
+    '</div>'
+
+  el.innerHTML = html
 }
 
 // ─── Black market ─────────────────────────────────────────────────────────────
@@ -663,19 +754,36 @@ function renderUpgradeShop() {
   listEl.innerHTML = ''
 
   GAME_UPGRADES.forEach((upgrade, idx) => {
+    const fittedCount = (player.upgrades ?? []).filter(n => n === upgrade.name).length
+    const alreadyFitted = upgrade.unique && fittedCount > 0
     const canAfford  = player.credits >= upgrade.price
     const hasSlots   = player.ship.upgrade_slots > 0
-    const canInstall = canAfford && hasSlots
+    const canInstall = canAfford && hasSlots && !alreadyFitted
 
     const row = document.createElement('div')
-    row.className = 'upgrade-row'
+    row.className = 'upgrade-row' + (alreadyFitted ? ' upgrade-fitted' : '')
+
+    // Tooltip content
+    const statChange = getUpgradeStatChange(upgrade)
+    const tipLines   = [
+      formatUpgradeEffect(upgrade),
+      statChange,
+      'Costs 1 upgrade slot',
+      `Price: ${upgrade.price.toLocaleString()} cr`
+    ].filter(Boolean).join('\n')
+
     row.innerHTML =
-      `<div>` +
-        `<div class="upgrade-name">${upgrade.name}</div>` +
+      `<div class="upgrade-info">` +
+        `<div class="upgrade-name">${upgrade.name}` +
+          (fittedCount > 0 && !upgrade.unique ? ` <span class="upgrade-count-badge">×${fittedCount} fitted</span>` : '') +
+        `</div>` +
         `<div class="upgrade-effect">${formatUpgradeEffect(upgrade)}</div>` +
+        `<div class="upgrade-tooltip-box">${tipLines.replace(/\n/g, '<br>')}</div>` +
       `</div>` +
       `<div class="upgrade-price">${upgrade.price.toLocaleString()} cr</div>` +
-      `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${idx})">Install</button>`
+      (alreadyFitted
+        ? `<button class="btn-install btn-fitted" disabled>✓ Fitted</button>`
+        : `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${idx})">Install</button>`)
 
     listEl.appendChild(row)
   })
@@ -694,6 +802,21 @@ function formatUpgradeEffect(upgrade) {
     case 'auto_refuel': return 'Auto top-up fuel on landing (10% discount)'
     default:           return upgrade.effect
   }
+}
+
+function getUpgradeStatChange(upgrade) {
+  const statMap = {
+    cargo:     'cargo',
+    speed:     'speed',
+    turn_rate: 'turn_rate',
+    inertia:   'inertia',
+    hull:      'hull'
+  }
+  const key = statMap[upgrade.effect]
+  if (!key) return null
+  const cur  = player.ship[key]
+  const next = cur + upgrade.delta
+  return `${key.replace('_',' ')}: ${cur} → ${next}`
 }
 
 function installUpgrade(upgradeIdx) {
@@ -737,12 +860,15 @@ function buildMission(type, target) {
   const id = `m${++missionCounter}`
 
   if (type === 'delivery') {
-    const c     = GAME_COMMODITIES[Math.floor(Math.random() * GAME_COMMODITIES.length)]
+    const legalCommodities = GAME_COMMODITIES.filter(c => !c.illegal)
+    const c     = legalCommodities[Math.floor(Math.random() * legalCommodities.length)]
     const qty   = 1 + Math.floor(Math.random() * 4)
     const hops  = 2 + Math.floor(Math.random() * 3)
     const reward = Math.round(c.base_price * qty * (1.8 + Math.random() * 0.8))
     return {
       id, type,
+      commodityId: c.id,
+      cargoQty:    qty,
       title: `Deliver ${c.label}`,
       desc:  `Transport ${qty}t of ${c.label} to ${target.name}. Contract expires after ${hops} jumps.`,
       target: { systemId: target.id, systemName: target.name },
@@ -772,9 +898,12 @@ function buildMission(type, target) {
     ]
     const g      = goods[Math.floor(Math.random() * goods.length)]
     const hops   = 3 + Math.floor(Math.random() * 3)
+    const qty    = 1 + Math.floor(Math.random() * 2)
     const reward = Math.round(2500 + Math.random() * 3500)
     return {
       id, type,
+      commodityId: 'contraband',
+      cargoQty:    qty,
       title: `Smuggle ${g.label}`,
       desc:  `Deliver a ${g.desc} to contacts in ${target.name}. High reward — faction reputation risk if caught. ${hops} jump limit.`,
       target: { systemId: target.id, systemName: target.name },
@@ -792,6 +921,7 @@ function generateMissions(planet) {
   const targets = sys.connections
     .filter(id => systemStates.has(id))
     .map(id => galaxy.systems[id])
+    .filter(s => s.planets.length > 0)
 
   if (targets.length === 0) return []
 
@@ -901,9 +1031,11 @@ function buildMissionCard(m, isActive, idx) {
     btn.className = 'btn-abandon'; btn.innerText = 'Abandon'
     btn.onclick = () => { abandonMission(m.id); renderMissionBoard() }
   } else {
-    btn.className = 'btn-accept'; btn.innerText = 'Accept'
-    btn.disabled  = (player.missions?.length ?? 0) >= 5
-    btn.onclick   = () => { acceptMission(idx); renderMissionBoard() }
+    const cargoUsed  = Object.values(player.cargo).reduce((s, n) => s + n, 0)
+    const noRoom     = !!(m.commodityId && m.cargoQty && cargoUsed + m.cargoQty > player.ship.cargo)
+    btn.className    = 'btn-accept'; btn.innerText = noRoom ? 'No room' : 'Accept'
+    btn.disabled     = (player.missions?.length ?? 0) >= 5 || noRoom
+    btn.onclick      = () => { acceptMission(idx); renderMissionBoard() }
   }
   footer.appendChild(btn)
   card.appendChild(footer)
@@ -915,6 +1047,17 @@ function acceptMission(idx) {
   if (!m) return
   if (!player.missions) player.missions = []
   if (player.missions.length >= 5) return
+
+  // Add mission cargo to player hold
+  if (m.commodityId && m.cargoQty) {
+    const used = Object.values(player.cargo).reduce((s, n) => s + n, 0)
+    if (used + m.cargoQty > player.ship.cargo) return  // no room
+    player.cargo[m.commodityId] = (player.cargo[m.commodityId] ?? 0) + m.cargoQty
+    if (!player.missionCargo) player.missionCargo = {}
+    player.missionCargo[m.commodityId] = (player.missionCargo[m.commodityId] ?? 0) + m.cargoQty
+    updateHUD()
+  }
+
   player.missions.push(m)
   availableMissions.splice(idx, 1)
   AudioEngine.notify(true)
@@ -922,7 +1065,199 @@ function acceptMission(idx) {
 
 function abandonMission(missionId) {
   if (!player.missions) return
+  const m = player.missions.find(m => m.id === missionId)
+  if (m) removeMissionCargo(m)
   player.missions = player.missions.filter(m => m.id !== missionId)
+  updateHUD()
+}
+
+// ─── Player info panel ────────────────────────────────────────────────────────
+
+function openPlayerInfo() {
+  document.getElementById('playerinfo-credits').innerText =
+    (player.credits ?? 0).toLocaleString() + ' cr'
+  renderPlayerInfo()
+  showPanel('panel-playerinfo')
+}
+
+function renderPlayerInfo() {
+  const body = document.getElementById('playerinfo-body')
+  const s    = player.ship
+  const cargoUsed  = Object.values(player.cargo).reduce((a, b) => a + b, 0)
+  const cargoFree  = s.cargo - cargoUsed
+  const upgradesOn = player.upgrades ?? []
+  const slotsUsed  = upgradesOn.length
+  const slotsTotal = s.upgrade_slots + slotsUsed  // current slots + used = original total
+
+  // ── Ship stats ──
+  const statRows = [
+    ['Hull',          `${player.hp} / ${s.hull}`],
+    ['Speed',         s.speed],
+    ['Turn Rate',     s.turn_rate],
+    ['Inertia',       s.inertia],
+    ['Weapon Slots',  s.weapon_slots],
+    ['Upgrade Slots', `${player.ship.upgrade_slots} remaining (${slotsUsed} used)`],
+    ['Fuel',          `${player.fuel ?? s.fuel_capacity} / ${s.fuel_capacity}`],
+    ['Cargo',         `${cargoUsed} used  ·  ${cargoFree} free  ·  ${s.cargo} total`],
+  ]
+
+  let html = `
+    <div class="pi-section">
+      <div class="pi-ship-name">${s.name} <span class="pi-tier">Tier ${s.tier}</span></div>
+      <div class="pi-stat-grid">
+        ${statRows.map(([l,v]) => `<div class="pi-stat-label">${l}</div><div class="pi-stat-val">${v}</div>`).join('')}
+      </div>
+    </div>`
+
+  // ── Cargo contents ──
+  const cargoEntries = Object.entries(player.cargo).filter(([,q]) => q > 0)
+  html += `<div class="pi-section-title">Cargo Hold</div><div class="pi-section">`
+  if (cargoEntries.length === 0) {
+    html += `<div class="pi-empty">Empty</div>`
+  } else {
+    html += `<div class="pi-cargo-list">`
+    for (const [id, qty] of cargoEntries) {
+      const com     = GAME_COMMODITIES.find(c => c.id === id)
+      const label   = com ? com.label : id
+      const mission = player.missionCargo?.[id] > 0
+      html += `<div class="pi-cargo-row">
+        <span class="pi-cargo-name">${label}${mission ? ' <span class="illegal-badge">MISSION</span>' : ''}</span>
+        <span class="pi-cargo-qty">${qty}t</span>
+      </div>`
+    }
+    html += `</div>`
+  }
+  html += `</div>`
+
+  // ── Fitted upgrades ──
+  html += `<div class="pi-section-title">Fitted Upgrades</div><div class="pi-section">`
+  if (upgradesOn.length === 0) {
+    html += `<div class="pi-empty">None installed</div>`
+  } else {
+    const counts = {}
+    for (const n of upgradesOn) counts[n] = (counts[n] ?? 0) + 1
+    html += `<div class="pi-upgrade-list">`
+    for (const [name, count] of Object.entries(counts)) {
+      const def = GAME_UPGRADES.find(u => u.name === name)
+      const eff = def ? formatUpgradeEffect(def) : ''
+      html += `<div class="pi-upgrade-row">
+        <span class="pi-upgrade-name">${name}${count > 1 ? ` ×${count}` : ''}</span>
+        <span class="pi-upgrade-eff">${eff}</span>
+      </div>`
+    }
+    html += `</div>`
+  }
+  html += `</div>`
+
+  // ── Active missions ──
+  const missions = player.missions ?? []
+  html += `<div class="pi-section-title">Active Missions</div><div class="pi-section">`
+  if (missions.length === 0) {
+    html += `<div class="pi-empty">No active missions</div>`
+  } else {
+    html += `<div class="pi-mission-list">`
+    for (const m of missions) {
+      const hops = m.hopsLeft !== undefined ? `  ·  ${m.hopsLeft} jump${m.hopsLeft !== 1 ? 's' : ''} left` : ''
+      html += `<div class="pi-mission-row">
+        <span class="pi-mission-name">${m.title}</span>
+        <span class="pi-mission-meta">${m.target.systemName}${hops}</span>
+        <span class="pi-mission-reward">+${m.reward.toLocaleString()} cr</span>
+      </div>`
+    }
+    html += `</div>`
+  }
+  html += `</div>`
+
+  body.innerHTML = html
+}
+
+// ─── Active missions panel ────────────────────────────────────────────────────
+
+function openActiveMissions() {
+  document.getElementById('activemissions-credits').innerText =
+    (player.credits ?? 0).toLocaleString()
+  renderActiveMissions()
+  showPanel('panel-activemissions')
+}
+
+function renderActiveMissions() {
+  const body = document.getElementById('activemissions-body')
+  body.innerHTML = ''
+  const active = player.missions ?? []
+  if (active.length === 0) {
+    const p = document.createElement('p')
+    p.className = 'no-planets'; p.innerText = 'No active missions.'
+    body.appendChild(p)
+    return
+  }
+  const list = document.createElement('div')
+  list.className = 'mission-list'
+  active.forEach(m => {
+    const card = buildMissionCard(m, true)
+    // Rewire abandon to also refresh this panel
+    const btn = card.querySelector('.btn-abandon')
+    if (btn) btn.onclick = () => { abandonMission(m.id); renderActiveMissions() }
+    list.appendChild(card)
+  })
+  body.appendChild(list)
+}
+
+// ─── Mission complete popup ───────────────────────────────────────────────────
+
+const MISSION_FLAVOR = {
+  delivery:  ['Package delivered. Contract fulfilled.', 'Goods received. Payment incoming.', 'Delivery confirmed. Well done, Commander.'],
+  smuggling: ['Contraband offloaded. No questions asked.', 'Contact satisfied. Credits transferred.', 'Shipment received. Stay off the scanners.'],
+  bounty:    ['Target eliminated. Bounty confirmed.', 'Contract closed. Good hunting, Commander.']
+}
+
+function checkMissionCompletions() {
+  if (!player.missions?.length) return
+  const sysId = galaxy.systems[player.system].id
+  const completing = player.missions.filter(
+    m => (m.type === 'delivery' || m.type === 'smuggling') && m.target.systemId === sysId
+  )
+  if (completing.length === 0) return
+
+  // Remove cargo and missions from active list now; credits awarded on collect
+  for (const m of completing) removeMissionCargo(m)
+  player.missions = player.missions.filter(m => !completing.some(c => c.id === m.id))
+  updateHUD()
+
+  missionCompleteQueue = [...completing]
+  showNextMissionComplete()
+}
+
+function showNextMissionComplete() {
+  const popup = document.getElementById('popup-mission-complete')
+  if (missionCompleteQueue.length === 0) { popup.classList.add('hidden'); return }
+
+  const m       = missionCompleteQueue[0]
+  const flavors = MISSION_FLAVOR[m.type] ?? ['Contract fulfilled.']
+  const flavor  = flavors[Math.floor(Math.random() * flavors.length)]
+
+  const badge = document.getElementById('popup-mission-type-badge')
+  badge.innerText   = MISSION_TYPE_LABEL[m.type] || m.type
+  badge.className   = `mission-type-badge mission-type-${m.type}`
+
+  document.getElementById('popup-mission-title').innerText  = m.title
+  document.getElementById('popup-mission-flavor').innerText = flavor
+  document.getElementById('popup-mission-reward').innerText = `+${m.reward.toLocaleString()} credits`
+
+  const counter = document.getElementById('popup-mission-counter')
+  counter.innerText = missionCompleteQueue.length > 1
+    ? `${missionCompleteQueue.length} missions to collect`
+    : ''
+
+  popup.classList.remove('hidden')
+}
+
+function collectMissionReward() {
+  if (missionCompleteQueue.length === 0) return
+  const m = missionCompleteQueue.shift()
+  player.credits += m.reward
+  updateHUD()
+  AudioEngine.notify(true)
+  showNextMissionComplete()
 }
 
 // ─── Pause menu ───────────────────────────────────────────────────────────────
@@ -997,6 +1332,8 @@ const KEYBIND_LABELS = {
   map:       'Galaxy Map',
   jump:      'Jump',
   fire:      'Fire Weapon',
+  boost:     'Boost',
+  info:      'Commander Status',
   pause:     'Pause / Menu'
 }
 

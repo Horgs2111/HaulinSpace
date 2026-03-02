@@ -1290,3 +1290,289 @@ canvas {
 .hud-jump.hud-jump-set {
   color: #557799;
 }
+
+/* ─── Market trend arrows (Phase 21) ─────────────────────────────────────── */
+
+.price-trend-up   { color: #cc8844; font-size: 11px; vertical-align: middle; }
+.price-trend-dn   { color: #55cc88; font-size: 11px; vertical-align: middle; }
+.price-trend-flat { color: #556688; font-size: 11px; vertical-align: middle; }
+
+/* ─── Cargo manifest panel (Phase 21) ────────────────────────────────────── */
+
+.cargo-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: #445566;
+  font-size: 14px;
+}
+
+.cargo-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.cargo-header,
+.cargo-row {
+  display: grid;
+  grid-template-columns: 1fr 60px 110px 120px 120px;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.cargo-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #445566;
+  border-bottom: 1px solid rgba(60,100,180,0.20);
+  padding-bottom: 6px;
+}
+
+.cargo-row {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.cargo-row:hover {
+  background: rgba(60,100,180,0.06);
+}
+
+.cargo-name {
+  color: #ccd6f0;
+  font-weight: 500;
+}
+
+.cargo-name .illegal-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #cc4444;
+  border: 1px solid rgba(200,60,60,0.40);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 6px;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
+.cargo-name .mission-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: #ff9944;
+  border: 1px solid rgba(255,140,60,0.40);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 4px;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
+.cargo-num {
+  text-align: right;
+  color: #7799aa;
+  font-variant-numeric: tabular-nums;
+}
+
+.cargo-sellest {
+  color: #55aa77;
+}
+
+.cargo-totals {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 12px 4px;
+  font-size: 13px;
+  color: #667799;
+  border-top: 1px solid rgba(60,100,180,0.20);
+  margin-top: 6px;
+}
+
+.cargo-totals strong {
+  color: #aabbcc;
+}
+
+/* ─── Mission complete popup ────────────────────────────────────────────── */
+
+.popup-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 80;
+}
+
+.popup-overlay.hidden { display: none; }
+
+.popup-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  background: rgba(4, 10, 32, 0.96);
+  border: 1px solid rgba(80, 160, 80, 0.45);
+  border-radius: 10px;
+  padding: 40px 52px 44px;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.80), 0 0 32px rgba(60, 180, 80, 0.12);
+  min-width: 340px;
+  max-width: 480px;
+  text-align: center;
+}
+
+.popup-header {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #88ffaa;
+  text-shadow: 0 0 20px rgba(80, 220, 100, 0.55);
+}
+
+.popup-mission-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ccddef;
+  margin-top: 2px;
+}
+
+.popup-flavor {
+  font-size: 13px;
+  color: #7788aa;
+  font-style: italic;
+}
+
+.popup-reward-amount {
+  font-size: 26px;
+  font-weight: 900;
+  color: #ffe066;
+  text-shadow: 0 0 16px rgba(255, 200, 50, 0.45);
+  letter-spacing: 0.04em;
+}
+
+.popup-collect-btn {
+  margin-top: 8px;
+  min-width: 180px;
+}
+
+.popup-counter {
+  font-size: 12px;
+  color: #556688;
+  min-height: 16px;
+}
+
+/* ─── Player info panel ──────────────────────────────────────────────────── */
+
+.pi-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4466aa;
+  margin: 22px 0 6px;
+}
+
+.pi-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(60,100,200,0.14);
+  border-radius: 6px;
+  padding: 14px 18px;
+}
+
+.pi-ship-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ddeeff;
+  margin-bottom: 12px;
+}
+
+.pi-tier {
+  font-size: 12px;
+  font-weight: 400;
+  color: #556688;
+  margin-left: 8px;
+}
+
+.pi-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 24px;
+}
+
+.pi-stat-label { font-size: 12px; color: #7788aa; }
+.pi-stat-val   { font-size: 12px; color: #ccddef; font-weight: 600; }
+
+.pi-empty { font-size: 13px; color: #445566; font-style: italic; }
+
+.pi-cargo-list, .pi-upgrade-list, .pi-mission-list {
+  display: flex; flex-direction: column; gap: 5px;
+}
+
+.pi-cargo-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px;
+}
+.pi-cargo-name { color: #aabbcc; }
+.pi-cargo-qty  { color: #7799bb; font-weight: 600; }
+
+.pi-upgrade-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; gap: 12px;
+}
+.pi-upgrade-name { color: #aabbcc; font-weight: 600; flex-shrink: 0; }
+.pi-upgrade-eff  { color: #556688; font-size: 12px; text-align: right; }
+
+.pi-mission-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px 14px;
+  align-items: baseline;
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(60,100,200,0.10);
+}
+.pi-mission-row:last-child { border-bottom: none; }
+.pi-mission-name   { color: #aabbcc; font-weight: 600; }
+.pi-mission-meta   { color: #556688; font-size: 12px; }
+.pi-mission-reward { color: #ffe066; font-weight: 700; white-space: nowrap; }
+
+/* ─── Upgrade shop improvements ─────────────────────────────────────────── */
+
+.upgrade-info { position: relative; flex: 1; }
+
+.upgrade-fitted { opacity: 0.55; }
+
+.upgrade-count-badge {
+  font-size: 11px;
+  color: #77aacc;
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+.btn-fitted {
+  background: rgba(40,80,40,0.30);
+  color: #66bb66;
+  border-color: rgba(60,140,60,0.35);
+  cursor: default;
+}
+
+.upgrade-tooltip-box {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: rgba(2,7,22,0.96);
+  border: 1px solid rgba(80,130,220,0.45);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #8899bb;
+  line-height: 1.7;
+  white-space: nowrap;
+  z-index: 50;
+  pointer-events: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+}
+
+.upgrade-row:hover .upgrade-tooltip-box { display: block; }

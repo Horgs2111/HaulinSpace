@@ -57,6 +57,9 @@
       <button class="menu-btn" id="btn-pause-resume">Resume</button>
       <button class="menu-btn" id="btn-pause-save">Save Game</button>
       <button class="menu-btn" id="btn-pause-load">Load Last Save</button>
+      <button class="menu-btn" id="btn-pause-cargo" onclick="openCargoManifest()">Cargo Manifest</button>
+      <button class="menu-btn" id="btn-pause-info" onclick="openPlayerInfo()">Commander Status</button>
+      <button class="menu-btn" id="btn-pause-missions" onclick="openActiveMissions()">Active Missions</button>
       <button class="menu-btn" id="btn-pause-options">Options</button>
       <button class="menu-btn" id="btn-pause-quit">Quit to Menu</button>
     </nav>
@@ -195,6 +198,61 @@
   <div class="panel-body">
     <div id="upgrades-ship-info"></div>
     <div id="upgrades-list"></div>
+  </div>
+</div>
+
+<!-- Cargo manifest panel -->
+<div id="panel-cargo" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Back</button>
+    <div class="panel-header-text">
+      <h2>Cargo Manifest</h2>
+    </div>
+    <div class="panel-header-right">
+      Credits&nbsp;<span id="cargo-credits">—</span>
+    </div>
+  </div>
+  <div class="panel-body" id="cargo-manifest-body"></div>
+</div>
+
+<!-- Player info panel -->
+<div id="panel-playerinfo" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Back</button>
+    <div class="panel-header-text">
+      <h2>Commander Status</h2>
+    </div>
+    <div class="panel-header-right">
+      Credits&nbsp;<span id="playerinfo-credits">—</span>
+    </div>
+  </div>
+  <div class="panel-body" id="playerinfo-body"></div>
+</div>
+
+<!-- Active missions panel -->
+<div id="panel-activemissions" class="panel hidden">
+  <div class="panel-header">
+    <button class="btn-back" onclick="closePanel()">← Back</button>
+    <div class="panel-header-text">
+      <h2>Active Missions</h2>
+    </div>
+    <div class="panel-header-right">
+      Credits&nbsp;<span id="activemissions-credits">—</span>
+    </div>
+  </div>
+  <div class="panel-body" id="activemissions-body"></div>
+</div>
+
+<!-- Mission complete popup -->
+<div id="popup-mission-complete" class="popup-overlay hidden">
+  <div class="popup-modal">
+    <div class="popup-header">Mission Complete</div>
+    <div id="popup-mission-type-badge" class="mission-type-badge"></div>
+    <div id="popup-mission-title" class="popup-mission-title"></div>
+    <div id="popup-mission-flavor" class="popup-flavor"></div>
+    <div id="popup-mission-reward" class="popup-reward-amount"></div>
+    <button class="menu-btn popup-collect-btn" onclick="collectMissionReward()">Collect Reward</button>
+    <div id="popup-mission-counter" class="popup-counter"></div>
   </div>
 </div>
 
