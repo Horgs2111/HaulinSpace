@@ -90,6 +90,23 @@ function openLanding(specificPlanet) {
   // If called without argument, show all system planets (fallback / future use).
   const toShow = specificPlanet ? [specificPlanet] : sys.planets
 
+  // Auto Refueler: top up fuel automatically on landing (10% discount)
+  if (player.upgrades?.includes('Auto Refueler') && specificPlanet?.fuel) {
+    const cap   = player.ship.fuel_capacity
+    const needed = cap - (player.fuel ?? cap)
+    if (needed > 0) {
+      const fuelEvent    = (typeof activeEvents !== 'undefined') && activeEvents.find(e => e.effect === 'fuel_prices_up')
+      const pricePerJump = Math.floor(150 * player.ship.tier * (fuelEvent ? 2 : 1) * 0.90)
+      const canAfford    = Math.floor(player.credits / pricePerJump)
+      const toBuy        = Math.min(needed, canAfford)
+      if (toBuy > 0) {
+        player.credits -= toBuy * pricePerJump
+        player.fuel     = (player.fuel ?? cap) + toBuy
+        updateHUD()
+      }
+    }
+  }
+
   if (toShow.length === 0) {
     const p = document.createElement('p')
     p.className = 'no-planets'
@@ -154,7 +171,73 @@ function buildPlanetBlock(planet) {
   })
 
   block.appendChild(grid)
+
+  // ── Refuel section ────────────────────────────────────────────────────────
+  if (planet.fuel) {
+    const refuelRow = document.createElement('div')
+    refuelRow.className = 'refuel-row'
+    refuelRow.id = 'refuel-row-' + planet.id
+
+    const cap          = player.ship.fuel_capacity
+    const needed       = cap - (player.fuel ?? cap)
+    const fuelEvent    = (typeof activeEvents !== 'undefined') && activeEvents.find(e => e.effect === 'fuel_prices_up')
+    const hasAutoRefuel = player.upgrades?.includes('Auto Refueler')
+    const pricePerJump = 150 * player.ship.tier * (fuelEvent ? 2 : 1) * (hasAutoRefuel ? 0.90 : 1)
+    const totalCost    = Math.floor(needed * pricePerJump)
+
+    if (hasAutoRefuel) {
+      refuelRow.innerHTML = `
+        <span class="refuel-label">Fuel Depot</span>
+        <span class="refuel-status">${player.fuel ?? cap} / ${cap}</span>
+        <span class="refuel-auto-badge">Auto Refueler active — 10% off</span>
+      `
+    } else {
+      refuelRow.innerHTML = `
+        <span class="refuel-label">Fuel Depot</span>
+        <span class="refuel-status">${player.fuel ?? cap} / ${cap}</span>
+        <span class="refuel-cost">${needed > 0 ? totalCost.toLocaleString() + ' cr' : 'Full'}</span>
+        <button class="refuel-btn" id="refuel-btn-${planet.id}"
+          ${needed <= 0 || player.credits < pricePerJump ? 'disabled' : ''}
+          onclick="refuelShip(${planet.id})">Refuel</button>
+      `
+    }
+    if (fuelEvent) {
+      const warn = document.createElement('div')
+      warn.className = 'refuel-event-warn'
+      warn.innerText = '⚠ Fuel Shortage — prices doubled'
+      refuelRow.appendChild(warn)
+    }
+    block.appendChild(refuelRow)
+  }
+
   return block
+}
+
+function refuelShip(planetId) {
+  const cap   = player.ship.fuel_capacity
+  const needed = cap - (player.fuel ?? cap)
+  if (needed <= 0) return
+
+  const fuelEvent    = (typeof activeEvents !== 'undefined') && activeEvents.find(e => e.effect === 'fuel_prices_up')
+  const pricePerJump = 150 * player.ship.tier * (fuelEvent ? 2 : 1)
+  const canAfford    = Math.floor(player.credits / pricePerJump)
+  const toBuy        = Math.min(needed, canAfford)
+  if (toBuy <= 0) { missionNotify = { text: 'Not enough credits to refuel', timer: 2.0, success: false }; return }
+
+  player.credits -= toBuy * pricePerJump
+  player.fuel     = (player.fuel ?? cap) + toBuy
+  updateHUD()
+  AudioEngine.trade()
+
+  // Refresh the refuel row in-place
+  const row   = document.getElementById('refuel-row-' + planetId)
+  const newNeeded = cap - player.fuel
+  if (row) {
+    row.querySelector('.refuel-status').innerText = player.fuel + ' / ' + cap
+    row.querySelector('.refuel-cost').innerText   = newNeeded > 0 ? (newNeeded * pricePerJump).toLocaleString() + ' cr' : 'Full'
+    const btn = row.querySelector('.refuel-btn')
+    if (btn) btn.disabled = newNeeded <= 0 || player.credits < pricePerJump
+  }
 }
 
 // ─── Market ───────────────────────────────────────────────────────────────────
@@ -541,6 +624,7 @@ function buyShip(shipIdx) {
   player.cargo    = newCargo
   player.ship     = Object.assign({}, ship)
   player.hp       = ship.hull
+  player.fuel     = ship.fuel_capacity
   player.upgrades = []
 
   updateHUD()
@@ -607,6 +691,7 @@ function formatUpgradeEffect(upgrade) {
     case 'hull':       return `+${d} Hull strength`
     case 'damage_pct': return `+${Math.round(d * 100)}% Weapon damage`
     case 'jump_cost':  return `${Math.round(d * 100)}% Jump fuel cost`
+    case 'auto_refuel': return 'Auto top-up fuel on landing (10% discount)'
     default:           return upgrade.effect
   }
 }

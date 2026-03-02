@@ -69,6 +69,61 @@ canvas {
   font-weight: 600;
 }
 
+.hud-fuel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.hud-fuel-label {
+  font-size: 11px;
+  color: #445566;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fuel-bar {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.fuel-frag {
+  width: 6px;
+  height: 14px;
+  border-radius: 1px;
+  background: rgba(20, 35, 70, 0.80);
+  border: 1px solid rgba(60, 100, 180, 0.22);
+}
+
+.fuel-frag-full {
+  background: #2a5aaa;
+  border-color: rgba(80, 140, 220, 0.50);
+}
+
+.fuel-frag-warn {
+  background: #cc3333;
+  border-color: rgba(220, 60, 60, 0.60);
+  animation: fuel-pulse 0.7s ease-in-out infinite;
+}
+
+@keyframes fuel-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+.hud-fuel-text {
+  font-size: 11px;
+  color: #4a6888;
+  min-width: 28px;
+}
+
+.hud-fuel-empty {
+  color: #cc3333;
+  font-weight: 700;
+}
+
 .btn-cog {
   margin-left: auto;
   background: none;
@@ -399,6 +454,80 @@ canvas {
   font-size: 12px;
   color: #667788;
   line-height: 1.45;
+}
+
+/* ─── Refuel row ─────────────────────────────────────────────────────────── */
+
+.refuel-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 12px 18px;
+  background: rgba(10, 22, 55, 0.55);
+  border: 1px solid rgba(60, 100, 180, 0.22);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.refuel-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #7799bb;
+  letter-spacing: 0.04em;
+  flex: 1;
+}
+
+.refuel-status {
+  font-size: 13px;
+  color: #4a6888;
+}
+
+.refuel-cost {
+  font-size: 13px;
+  color: #aabfd8;
+  min-width: 80px;
+  text-align: right;
+}
+
+.refuel-btn {
+  padding: 6px 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(80, 130, 210, 0.40);
+  background: rgba(16, 36, 90, 0.55);
+  color: #8899cc;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.refuel-btn:hover:not(:disabled) {
+  border-color: rgba(80, 130, 210, 0.80);
+  color: #ddeeff;
+  background: rgba(30, 60, 140, 0.65);
+}
+
+.refuel-btn:disabled {
+  opacity: 0.30;
+  cursor: not-allowed;
+}
+
+.refuel-auto-badge {
+  font-size: 11px;
+  color: #55bb88;
+  letter-spacing: 0.04em;
+  margin-left: auto;
+}
+
+.refuel-event-warn {
+  width: 100%;
+  font-size: 11px;
+  color: #cc8833;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
 }
 
 /* ─── Shared panel header right slot ─────────────────────────────────────── */

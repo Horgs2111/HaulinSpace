@@ -217,6 +217,7 @@ function initWarpStars() {
 function getJumpReadyStatus() {
   if (!jumpTarget) return { ready: false, reason: null }
   if (isSystemBlocked(jumpTarget)) return { ready: false, reason: 'Jump route blocked — Supernova Warning' }
+  if (player.fuel <= 0) return { ready: false, reason: 'No fuel — land and refuel' }
   if (!systemLayout) return { ready: false, reason: 'No system data' }
   for (const p of systemLayout.planets) {
     const dist = Math.hypot(player.x - p.sx, player.y - p.sy)
@@ -1675,6 +1676,7 @@ function initGame() {
     credits:      1000,
     cargo:        {},
     hp:           GAME_SHIPS[0].hull,
+    fuel:         GAME_SHIPS[0].fuel_capacity,
     upgrades:     [],
     missions:     [],
     x:            startX,
@@ -1708,6 +1710,9 @@ function travel(targetId) {
   if (!systemStates.has(targetId)) return
 
   clearCombat()
+
+  // ── Fuel ──────────────────────────────────────────────────────────────────
+  player.fuel = Math.max(0, (player.fuel ?? player.ship.fuel_capacity) - 1)
 
   // ── Event tracking ────────────────────────────────────────────────────────
   jumpCount++
@@ -1767,6 +1772,28 @@ function updateHUD() {
   document.getElementById('hud-credits').innerText  = player.credits.toLocaleString()
   const cargoUsed = Object.values(player.cargo).reduce((s, n) => s + n, 0)
   document.getElementById('hud-cargo').innerText    = cargoUsed + ' / ' + player.ship.cargo
+  updateFuelHUD()
+}
+
+function updateFuelHUD() {
+  const bar      = document.getElementById('hud-fuel-bar')
+  const text     = document.getElementById('hud-fuel-text')
+  if (!bar || !text || !player) return
+  const fuel     = player.fuel ?? player.ship.fuel_capacity
+  const cap      = player.ship.fuel_capacity
+  bar.innerHTML  = ''
+  for (let i = 0; i < cap; i++) {
+    const frag = document.createElement('span')
+    const filled = i < fuel
+    if (filled && fuel === 1) {
+      frag.className = 'fuel-frag fuel-frag-warn'
+    } else {
+      frag.className = filled ? 'fuel-frag fuel-frag-full' : 'fuel-frag'
+    }
+    bar.appendChild(frag)
+  }
+  text.innerText = fuel + ' / ' + cap
+  text.className = fuel === 0 ? 'hud-fuel-text hud-fuel-empty' : 'hud-fuel-text'
 }
 
 // ─── Save / Load ──────────────────────────────────────────────────────────────
@@ -1786,6 +1813,7 @@ function saveGame() {
         system:       player.system,
         ship:         player.ship,
         hp:           player.hp,
+        fuel:         player.fuel ?? player.ship.fuel_capacity,
         upgrades:     player.upgrades,
         credits:      player.credits,
         cargo:        player.cargo,
@@ -1867,6 +1895,8 @@ function loadGame() {
     }
 
     player        = { ...data.player, landedPlanet: null }
+    // Back-compat: saves before fuel system won't have fuel field
+    if (player.fuel == null) player.fuel = player.ship.fuel_capacity ?? 6
     nearPlanet    = null
     lastFrameTime = 0
     clearCombat()

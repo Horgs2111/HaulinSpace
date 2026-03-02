@@ -177,6 +177,7 @@ function generateGalaxy(count) {
       if (ftype === 'pirate') {
         p.market      = false
         p.missionBoard = false
+        p.fuel        = false
         p.blackMarket = Math.random() > 0.30  // 70% of pirate planets have a black market
       }
     })
@@ -197,6 +198,16 @@ const MARKET_ODDS = {
   frontier:     0.40
 }
 
+// Fuel availability odds per planet type (pirate planets always override to false)
+const FUEL_ODDS = {
+  trade_hub:    1.00,
+  military:     1.00,
+  industrial:   1.00,
+  agricultural: 0.80,
+  mining:       0.80,
+  frontier:     0.50
+}
+
 function generatePlanet() {
   const type   = PLANET_TYPES[Math.floor(Math.random() * PLANET_TYPES.length)]
   const prefix = PLANET_PREFIXES[Math.floor(Math.random() * PLANET_PREFIXES.length)]
@@ -206,6 +217,7 @@ function generatePlanet() {
     type,
     faction:      null,  // filled in after system assignment
     market:       Math.random() < (MARKET_ODDS[type] ?? 0.65),
+    fuel:         Math.random() < (FUEL_ODDS[type]   ?? 0.65),
     shipyard:     Math.random() > 0.72,
     upgradeShop:  Math.random() > 0.62,
     missionBoard: Math.random() > 0.55,

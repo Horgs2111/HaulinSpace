@@ -514,47 +514,30 @@ PHASE 22 — FUEL SYSTEM
 Ships have a finite fuel supply measured in jumps. Running out strands the
 player — they can only drift and fight until refuelled.
 
-[ ] Ship fuel capacity (data)
-    - Add fuel_capacity field to each ship in GAME_SHIPS (number of jumps)
-    - Suggested values scale with ship class:
-        Tier 1 ships      — 6 jumps
-        Tier 2 ships      — 8 jumps
-        Tier 3 ships      — 10 jumps
-        Tier 4 ships      — 12 jumps
-        Tier 5 ships      — 14 jumps
-        Tier 6 ships      — 16 jumps
-    - player.fuel initialised to player.ship.fuel_capacity on new game / ship purchase
+[x] Ship fuel capacity (data)
+    - fuel_capacity added to all 15 ships in GAME_SHIPS (Tier 1=6 → Tier 6=16)
+    - player.fuel initialised on new game and ship purchase
     - Each jump in travel() decrements player.fuel by 1
-    - Jump blocked (with warning) if player.fuel === 0
+    - Jump blocked (with "No fuel — land and refuel" warning) if player.fuel === 0
 
-[ ] Refuelling
-    - Most planets offer refuelling (add fuel: true/false to generatePlanet())
-        Trade hubs, military, industrial: always have fuel
-        Agricultural, mining: 80% chance
-        Frontier: 50% chance
-        Pirate faction planets: never (use black market workaround if desired)
-    - Refuel cost = flat rate per jump of capacity: base 150 cr × ship tier
-      (e.g. Tier 1 ship full refuel = 6 × 150 = 900 cr; Tier 6 = 16 × 900 = 14,400 cr)
-    - Refuel button on planet landing screen when fuel < fuel_capacity and planet has fuel
-    - "Top up" only — pays for jumps remaining to fill, not a fixed full-tank price
-    - Existing Fuel Shortage event doubles refuel cost (ties into existing event system)
+[x] Refuelling
+    - fuel: bool added to generatePlanet() per FUEL_ODDS table
+    - Trade hubs/military/industrial: 100%, agricultural/mining: 80%, frontier: 50%
+    - Pirate faction planets always fuel: false
+    - Refuel row appears on planet landing screen when planet has fuel
+    - Cost: 150 cr × ship tier per jump; top-up only
+    - Fuel Shortage event doubles refuel cost automatically
+    - Refuel row updates in-place without reopening the panel
 
-[ ] Fuel HUD indicator
-    - Fixed-width bar in the HUD strip, same pixel width for all ships
-    - Bar is divided into fragments equal to ship.fuel_capacity
-    - Each fragment represents one jump; filled fragments shown in blue-white,
-      empty in dark grey
-    - When exactly 1 fragment remains, that fragment pulses red to warn the player
-    - Bar sits alongside the existing credits / cargo readouts
-    - Tooltip / label: "FUEL  3 / 10" on hover (or always visible as text beneath bar)
+[x] Fuel HUD indicator
+    - Fragmented bar in HUD: one fragment per jump of capacity
+    - Filled = blue, empty = dark, last fragment pulses red when fuel === 1
+    - "N / cap" text label beside bar; turns red when fuel === 0
 
-[ ] Stranded state
-    - If player.fuel reaches 0 mid-flight they can still move within the system
-      but the jump button is disabled and the HUD shows "NO FUEL" in red
-    - Planet landing still works — player must land and refuel to continue
-    - If in a system with no fuel, the player is genuinely stranded; a distress
-      beacon mission could appear on the mission board of adjacent systems
-      (future hook — for now just display the warning)
+[x] Stranded state
+    - Jump blocked with warning when fuel === 0
+    - Ship can still fly within the system; landing and refuelling still works
+    - "NO FUEL" shown in red beside the fuel bar
 
 ===========================================
 WISHLIST — FUTURE / BIG IDEAS
