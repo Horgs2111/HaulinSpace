@@ -21,28 +21,7 @@
   <div class="hud-stat">Cargo <span id="hud-cargo">—</span></div>
   <div class="hud-sep"></div>
   <div id="hud-jump" class="hud-jump"></div>
-  <div class="hud-hint">W/A/D to fly&nbsp;&nbsp;·&nbsp;&nbsp;L to land&nbsp;&nbsp;·&nbsp;&nbsp;M galaxy map&nbsp;&nbsp;·&nbsp;&nbsp;J to jump</div>
-  <button class="btn-fit" onclick="resetView()">Fit</button>
-  <button class="btn-cog" id="btn-settings" onclick="toggleSettings()">⚙</button>
-</div>
-
-<!-- In-game settings panel -->
-<div id="panel-settings" class="settings-panel hidden">
-  <div class="settings-header">
-    <span class="settings-title">Settings</span>
-    <button class="settings-close" onclick="closeSettings()">✕</button>
-  </div>
-  <button class="settings-btn" onclick="settingsSaveGame()">Save Game</button>
-  <button class="settings-btn" id="settings-load-btn" onclick="settingsLoadGame()">Load Last Save</button>
-  <div class="settings-divider"></div>
-  <div class="settings-volume-row">
-    <label>Music</label>
-    <input type="range" id="settings-music" min="0" max="100" value="80">
-  </div>
-  <div class="settings-volume-row">
-    <label>SFX</label>
-    <input type="range" id="settings-sfx" min="0" max="100" value="80">
-  </div>
+  <button class="btn-cog" id="btn-cog" onclick="openPauseMenu()">⚙</button>
 </div>
 
 <!-- Title screen -->
@@ -64,20 +43,46 @@
   </nav>
 </div>
 
+<!-- Pause menu -->
+<div id="screen-pause" class="fullscreen-overlay hidden">
+  <div class="pause-modal">
+    <div class="pause-title">PAUSED</div>
+    <nav class="menu-nav">
+      <button class="menu-btn" id="btn-pause-resume">Resume</button>
+      <button class="menu-btn" id="btn-pause-save">Save Game</button>
+      <button class="menu-btn" id="btn-pause-load">Load Last Save</button>
+      <button class="menu-btn" id="btn-pause-options">Options</button>
+      <button class="menu-btn" id="btn-pause-quit">Quit to Menu</button>
+    </nav>
+  </div>
+</div>
+
 <!-- Options -->
 <div id="screen-options" class="fullscreen-overlay hidden">
-  <h2 class="options-title">Options</h2>
-  <div class="options-body">
-    <div class="options-row">
-      <span>Music Volume</span>
-      <input type="range" id="opt-music" min="0" max="100" value="80">
+  <div class="options-modal">
+    <h2 class="options-title">Options</h2>
+    <div class="opt-tabs">
+      <button class="opt-tab-btn active" data-tab="audio">Audio</button>
+      <button class="opt-tab-btn" data-tab="keys">Keybindings</button>
     </div>
-    <div class="options-row">
-      <span>SFX Volume</span>
-      <input type="range" id="opt-sfx" min="0" max="100" value="80">
+    <div id="opt-tab-audio" class="opt-tab-content">
+      <div class="options-body">
+        <div class="options-row">
+          <span>Music Volume</span>
+          <input type="range" id="opt-music" min="0" max="100" value="80">
+        </div>
+        <div class="options-row">
+          <span>SFX Volume</span>
+          <input type="range" id="opt-sfx" min="0" max="100" value="80">
+        </div>
+      </div>
     </div>
+    <div id="opt-tab-keys" class="opt-tab-content hidden">
+      <div id="keybind-list" class="keybind-list"></div>
+      <button class="menu-btn opt-defaults-btn" id="btn-keys-default" onclick="restoreDefaultKeybinds()">Restore Defaults</button>
+    </div>
+    <button class="menu-btn opt-back-btn" id="btn-options-back">Back</button>
   </div>
-  <button class="menu-btn" id="btn-options-back">Back</button>
 </div>
 
 <!-- Game over screen -->

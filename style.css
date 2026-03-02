@@ -69,32 +69,8 @@ canvas {
   font-weight: 600;
 }
 
-.hud-hint {
-  margin-left: auto;
-  font-size: 12px;
-  color: #334455;
-}
-
-.btn-fit {
-  margin-left: 14px;
-  background: none;
-  border: 1px solid rgba(80, 130, 210, 0.30);
-  color: #556688;
-  padding: 4px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: border-color 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-
-.btn-fit:hover {
-  border-color: rgba(80, 130, 210, 0.70);
-  color: #88aacc;
-}
-
 .btn-cog {
-  margin-left: 10px;
+  margin-left: auto;
   background: none;
   border: 1px solid rgba(80, 130, 210, 0.30);
   color: #556688;
@@ -113,105 +89,27 @@ canvas {
   color: #88aacc;
 }
 
-/* ─── Settings panel ─────────────────────────────────────────────────────── */
+/* ─── Pause modal ────────────────────────────────────────────────────────── */
 
-.settings-panel {
-  position: absolute;
-  top: 48px;
-  right: 12px;
-  width: 220px;
-  background: rgba(4, 10, 30, 0.97);
-  border: 1px solid rgba(60, 100, 200, 0.35);
-  border-radius: 6px;
-  z-index: 25;
+.pause-modal {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
-  padding-bottom: 12px;
-}
-
-.settings-panel.hidden {
-  display: none;
-}
-
-.settings-header {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 8px;
-  border-bottom: 1px solid rgba(60, 100, 200, 0.22);
-  margin-bottom: 8px;
+  background: rgba(4, 8, 26, 0.92);
+  border: 1px solid rgba(60, 100, 200, 0.30);
+  border-radius: 8px;
+  padding: 40px 48px 44px;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.7);
 }
 
-.settings-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #aabfd8;
-  letter-spacing: 0.05em;
+.pause-title {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0.20em;
   text-transform: uppercase;
-}
-
-.settings-close {
-  background: none;
-  border: none;
-  color: #445566;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0 2px;
-  line-height: 1;
-  transition: color 0.15s;
-}
-
-.settings-close:hover {
-  color: #88aacc;
-}
-
-.settings-btn {
-  display: block;
-  width: calc(100% - 28px);
-  margin: 4px 14px 0;
-  background: none;
-  border: 1px solid rgba(80, 130, 210, 0.28);
-  color: #8899bb;
-  padding: 7px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-
-.settings-btn:hover:not(:disabled) {
-  border-color: rgba(80, 130, 210, 0.65);
-  color: #ccd6f0;
-  background: rgba(40, 70, 140, 0.18);
-}
-
-.settings-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.settings-divider {
-  height: 1px;
-  background: rgba(60, 100, 200, 0.18);
-  margin: 12px 14px 8px;
-}
-
-.settings-volume-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 14px;
-  gap: 10px;
-  font-size: 12px;
-  color: #667799;
-}
-
-.settings-volume-row input[type="range"] {
-  flex: 1;
-  accent-color: #4477cc;
+  color: #ddeeff;
+  text-shadow: 0 0 22px rgba(80, 130, 255, 0.5);
+  margin-bottom: 32px;
 }
 
 /* ─── Panels ─────────────────────────────────────────────────────────────── */
@@ -869,13 +767,65 @@ canvas {
 
 /* Options */
 
+.options-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(4, 8, 26, 0.92);
+  border: 1px solid rgba(60, 100, 200, 0.30);
+  border-radius: 8px;
+  padding: 36px 48px 40px;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.7);
+  min-width: 420px;
+}
+
 .options-title {
   font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #ddeeff;
-  margin-bottom: 36px;
+  margin-bottom: 24px;
+}
+
+.opt-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid rgba(60, 100, 200, 0.22);
+  width: 100%;
+}
+
+.opt-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #4a6080;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding: 6px 16px 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.opt-tab-btn:hover {
+  color: #8899bb;
+}
+
+.opt-tab-btn.active {
+  color: #aaccee;
+  border-bottom-color: #4477cc;
+}
+
+.opt-tab-content {
+  width: 100%;
+}
+
+.opt-tab-content.hidden {
+  display: none;
 }
 
 .options-body {
@@ -883,7 +833,7 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 22px;
-  margin-bottom: 40px;
+  margin-bottom: 0;
 }
 
 .options-row {
@@ -898,6 +848,77 @@ canvas {
 .options-row input[type="range"] {
   flex: 1;
   accent-color: #4d7acc;
+}
+
+/* Keybindings tab */
+
+.keybind-list {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.keybind-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.12s;
+}
+
+.keybind-row.rebinding {
+  background: rgba(60, 100, 180, 0.18);
+  outline: 1px solid rgba(80, 130, 210, 0.40);
+}
+
+.keybind-label {
+  flex: 1;
+  font-size: 12px;
+  color: #7788aa;
+}
+
+.keybind-key {
+  min-width: 52px;
+  text-align: center;
+  background: rgba(20, 35, 70, 0.70);
+  border: 1px solid rgba(60, 100, 180, 0.35);
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #99bbdd;
+}
+
+.keybind-btn {
+  background: none;
+  border: 1px solid rgba(80, 130, 210, 0.28);
+  color: #556688;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.keybind-btn:hover {
+  border-color: rgba(80, 130, 210, 0.65);
+  color: #99bbdd;
+}
+
+.opt-defaults-btn {
+  width: 360px;
+  margin-top: 14px;
+}
+
+.opt-back-btn {
+  width: 240px;
+  margin-top: 28px;
 }
 
 /* ─── Game over screen ───────────────────────────────────────────────────── */

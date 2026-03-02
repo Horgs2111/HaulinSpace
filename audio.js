@@ -38,7 +38,7 @@ const AudioEngine = (() => {
   }
 
   function setSfxVolume(v)   { if (sfxGain)   sfxGain.gain.value   = Math.max(0, v / 100) * 0.85 }
-  function setMusicVolume(v) { if (musicGain)  musicGain.gain.value = Math.max(0, v / 100) * 0.28 }
+  function setMusicVolume(v) { musicVol = Math.max(0, v / 100) * 0.28; if (musicGain) musicGain.gain.value = musicVol }
 
   // ── Utility ─────────────────────────────────────────────────────────────────
 
@@ -138,6 +138,17 @@ const AudioEngine = (() => {
   // Simple space drone: stack of detuned sine oscillators that slowly modulate.
 
   let musicInterval = null
+  let musicVol      = 0.28   // tracks current target so resumeMusic can restore it
+
+  function pauseMusic() {
+    if (!musicGain || !audioCtx) return
+    musicGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15)
+  }
+
+  function resumeMusic() {
+    if (!musicGain || !audioCtx || !musicNodes.length) return
+    musicGain.gain.setTargetAtTime(musicVol, audioCtx.currentTime, 0.4)
+  }
 
   function stopMusic() {
     if (musicInterval) { clearInterval(musicInterval); musicInterval = null }
@@ -232,6 +243,7 @@ const AudioEngine = (() => {
     startThrust, stopThrust,
     jumpSpool, jumpWarp,
     dock, trade, notify, alert,
-    startSpaceMusic, startCombatMusic, stopMusic
+    startSpaceMusic, startCombatMusic, stopMusic,
+    pauseMusic, resumeMusic
   }
 })()

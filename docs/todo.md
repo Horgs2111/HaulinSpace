@@ -290,9 +290,307 @@ PHASE 14 — POLISH 1
     - Observatory already implemented (frontier planets, radius-3 reveal)
 
 ===========================================
-PHASE 15 — POLISH 2
+PHASE 15 — AUDIO UPGRADE
 ===========================================
 
 [x] Audio (Web Audio API synthesised — no asset files)
     - Ambient space drone + combat drone music
     - SFX: thrust, weapon fire, hit, explosion, jump spool, jump warp, dock, trade, notify, alert
+
+[ ] Replace synthesised audio with real assets (once files are ready)
+    - music/space_ambient.ogg     — looping space flight drone
+    - music/combat.ogg            — looping combat track
+    - music/title.ogg             — title screen music
+    - music/docked.ogg            — docked-at-planet ambient
+    - sfx/thrust.ogg              — engine loop
+    - sfx/weapon_fire.ogg         — laser/cannon shot
+    - sfx/hit.ogg                 — projectile impact
+    - sfx/explosion.ogg           — ship destroyed
+    - sfx/jump_spool.ogg          — jump drive charging
+    - sfx/jump_warp.ogg           — warp transit
+    - sfx/dock.ogg                — landing/docking chime
+    - sfx/trade.ogg               — buy/sell confirm
+    - sfx/notify_success.ogg      — mission complete
+    - sfx/notify_fail.ogg         — mission failed/expired
+    - sfx/alert.ogg               — galactic event warning
+
+===========================================
+PHASE 16 — SHIP SPRITES
+===========================================
+
+All ships currently render as coloured triangles. Each needs a sprite image
+(PNG with transparency, recommended ~64×64 or ~96×96, facing right = 0°).
+
+Player / purchasable ships (15 total — data/ships.json):
+
+[ ] sprites/ships/rustrunner_shuttle.png       — Tier 1, starter ship, small boxy utility craft
+[ ] sprites/ships/cinder_scout.png             — Tier 1, sleek fast scout
+[ ] sprites/ships/mercury_courier.png          — Tier 2, slim delivery ship
+[ ] sprites/ships/atlas_freighter.png          — Tier 2, wide-body cargo hauler
+[ ] sprites/ships/drake_raider.png             — Tier 2, aggressive mid-tier raider
+[ ] sprites/ships/nova_trader.png              — Tier 3, bulky trade vessel
+[ ] sprites/ships/falcon_interceptor.png       — Tier 3, agile interceptor
+[ ] sprites/ships/orion_gunship.png            — Tier 3, medium warship
+[ ] sprites/ships/titan_hauler.png             — Tier 4, massive cargo ship
+[ ] sprites/ships/viper_strikecraft.png        — Tier 4, fast strike fighter
+[ ] sprites/ships/sentinel_frigate.png         — Tier 4, armoured frigate
+[ ] sprites/ships/leviathan_freighter.png      — Tier 5, enormous freighter
+[ ] sprites/ships/phantom_stealth.png          — Tier 5, sleek stealth ship
+[ ] sprites/ships/aegis_destroyer.png          — Tier 5, heavy destroyer
+[ ] sprites/ships/celestial_dreadnought.png    — Tier 6, massive capital ship
+
+NPC / enemy ships (these can share art with player ships or be distinct variants):
+
+[ ] sprites/ships/npc_pirate_light.png         — low-tier pirate (used for Tier 1–2 enemies)
+[ ] sprites/ships/npc_pirate_heavy.png         — high-tier pirate (used for Tier 3–5 enemies)
+[ ] sprites/ships/npc_trader.png               — NPC freighter that orbits planets
+
+Code work (once sprites are ready):
+[ ] Load sprites via Image() objects at startup; fall back to triangle if missing
+[ ] Draw player ship using ctx.drawImage() rotated to player.angle
+[ ] Draw enemy ships using sprite mapped from their ship.tier
+[ ] Draw NPC trader using trader sprite
+[ ] Scale sprites proportionally to ship hull stat (bigger hull = slightly larger sprite)
+
+===========================================
+PHASE 17 — PLANET & ENVIRONMENT SPRITES
+===========================================
+
+Planets currently render as coloured circles with a glow ring.
+
+Planet type images (each type needs at least one image; multiple variants optional):
+[ ] sprites/planets/agricultural.png      — green/brown fertile world
+[ ] sprites/planets/agricultural_2.png    — variant (optional)
+[ ] sprites/planets/mining.png            — rocky, cratered, grey/orange
+[ ] sprites/planets/mining_2.png          — variant (optional)
+[ ] sprites/planets/industrial.png        — polluted, dark with city lights
+[ ] sprites/planets/trade_hub.png         — bright, well-lit megacity world
+[ ] sprites/planets/military.png          — grey, fortified appearance
+[ ] sprites/planets/frontier.png          — barren, remote, dim
+
+Star / sun images:
+[ ] sprites/stars/star_yellow.png         — standard yellow star (most systems)
+[ ] sprites/stars/star_blue.png           — hot blue star
+[ ] sprites/stars/star_red.png            — red dwarf / red giant
+[ ] sprites/stars/star_white.png          — white star
+
+Code work (once sprites are ready):
+[ ] Add star_type field to systems in generateGalaxy() (derived from faction/seed)
+[ ] Draw sun using star sprite instead of canvas arc
+[ ] Draw planets using planet type sprite, with slow rotation via ctx.rotate(time)
+[ ] Keep atmosphere glow ring layered on top of planet sprite
+
+Loot / collectibles:
+[ ] sprites/loot/cargo_pod.png            — floating loot pickup (replaces ◆ text)
+
+===========================================
+PHASE 18 — PROJECTILE & WEAPON VARIETY
+===========================================
+
+Currently all projectiles are plain coloured circles. Each weapon tier / type
+should have a distinct look (and eventually distinct behaviour).
+
+Projectile sprite / style work:
+[ ] Player bolt (1 weapon slot)    — small blue-white energy bolt, narrow rect or teardrop
+[ ] Player bolt (2–3 weapon slots) — brighter, slightly larger, twin-shot offset
+[ ] Player bolt (4–6 weapon slots) — heavy cannon round, orange/red tint, wider
+[ ] Enemy bolt                     — red/crimson energy bolt, mirror of player styles by tier
+[ ] Missile (future weapon type)   — slow, homing; distinct elongated sprite with flame trail
+[ ] sprites/projectiles/bolt_player.png     — player energy bolt sprite (optional)
+[ ] sprites/projectiles/bolt_enemy.png      — enemy bolt sprite (optional)
+[ ] sprites/projectiles/missile.png         — missile sprite (optional)
+
+Code work:
+[ ] Add projectile.style field ('bolt_light' | 'bolt_heavy' | 'cannon') based on wslots
+[ ] Update drawProjectiles() to draw as rotated rects/shapes or sprites based on style
+[ ] Scale bolt size and glow intensity with weapon_slots tier
+[ ] Add missile weapon type to GAME_UPGRADES (homing, slow, high damage)
+
+===========================================
+PHASE 19 — REMAINING CONTENT & GAMEPLAY
+===========================================
+
+[ ] Faction reputation system
+    - Player reputation per faction (-100 to +100), starts at 0
+    - Trading/missions with a faction increases rep; attacking their ships reduces it
+    - High rep: better prices, exclusive missions, access to military ships
+    - Low rep: ships attack on sight, banned from faction shipyards/markets
+    - Displayed in HUD or dedicated reputation panel
+
+[ ] Escort mission type (deferred from Phase 11)
+    - Spawn an NPC ship that follows the player through one jump
+    - Player must keep it alive; pirate aggression scales up during escort
+    - Reward on successful arrival at destination
+
+[ ] Faction border overlays on galaxy map
+    - Soft coloured territory regions behind system nodes
+    - Convex hull or radial blend around each faction's cluster
+
+[ ] Additional galactic events
+    - Faction War: two factions conflict; systems contested, rep effects
+    - Plague Outbreak: medicine prices ×3 in affected systems for 10 jumps
+    - Gold Rush: luxuries prices ×2, player tips about a specific rich system
+
+[ ] Difficulty settings (New Game screen)
+    - Easy / Normal / Hard — affects starting credits, piracy rates, combat damage
+
+[ ] Tutorial / onboarding
+    - First-launch tooltip sequence covering movement, landing, market, jumping
+    - Can be skipped
+
+[ ] Statistics screen
+    - Total jumps, credits earned, cargo traded, enemies destroyed, missions completed
+    - Accessible from main menu or settings panel
+
+[ ] Credits / about screen
+    - Game version, controls reference
+
+===========================================
+PHASE 20 — IN-GAME MENU REVAMP
+===========================================
+
+The current settings panel is a minimal cog-icon dropdown. This phase
+replaces it with a proper full-screen pause menu and reworks the main menu
+options screen.
+
+[x] Pause menu (Escape key)
+    - Full-screen overlay that pauses physics, combat timers, and NPC updates
+    - Buttons: Resume, Save Game, Load Last Save, Options, Quit to Main Menu
+    - Replaces the current cog dropdown — cog button opens pause menu instead
+    - Distinct visual style from game panels (darker, more opaque, centred modal)
+
+[x] Options screen (accessible from pause menu and main menu)
+    - Audio tab: Music Volume slider, SFX Volume slider
+    - Keybindings tab (see below)
+    - Changes apply immediately; "Restore Defaults" button resets all
+
+[x] Keybindings
+    - Tabbed section within Options listing every bindable action:
+        Thrust Forward     (default W)
+        Thrust Reverse     (default S)
+        Rotate Left        (default A)
+        Rotate Right       (default D)
+        Fire Weapon        (default Space)
+        Land / Interact    (default L)
+        Jump               (default J)
+        Galaxy Map         (default M)
+        Pause / Menu       (default Escape)
+    - Click Rebind then press a key to reassign
+    - Conflicts auto-clear previous binding for that key
+    - Bindings persisted to localStorage
+    - DEFAULT_KEYBINDS constant; matchKey() + isKeyHeld() helpers in game.js
+
+[x] HUD polish pass
+    - Removed standalone Fit button from HUD
+    - HUD hint bar condensed to one-liner
+    - Cog button now opens full pause menu
+
+===========================================
+PHASE 21 — QUALITY OF LIFE
+===========================================
+
+[ ] Minimap
+    - Small always-visible radar in bottom-right showing nearby planets + enemies
+    - Blips colour-coded: blue = planet, red = enemy, teal = NPC trader, yellow = loot
+
+[ ] Autopilot / waypoint
+    - Click a planet on screen to set it as a waypoint; ship auto-flies toward it
+    - Player can interrupt autopilot at any time
+
+[ ] Market price history
+    - Track last 5 buy prices per commodity per planet
+    - Show trend arrow (↑↓) next to price in market panel
+
+[ ] Cargo manifest panel
+    - Dedicated screen showing full cargo contents, average buy price paid, estimated sell value
+
+[ ] Keybinding reference overlay
+    - Removed — replaced by full keybindings editor in Phase 20 Options screen
+
+===========================================
+PHASE 22 — FUEL SYSTEM
+===========================================
+
+Ships have a finite fuel supply measured in jumps. Running out strands the
+player — they can only drift and fight until refuelled.
+
+[ ] Ship fuel capacity (data)
+    - Add fuel_capacity field to each ship in GAME_SHIPS (number of jumps)
+    - Suggested values scale with ship class:
+        Tier 1 ships      — 6 jumps
+        Tier 2 ships      — 8 jumps
+        Tier 3 ships      — 10 jumps
+        Tier 4 ships      — 12 jumps
+        Tier 5 ships      — 14 jumps
+        Tier 6 ships      — 16 jumps
+    - player.fuel initialised to player.ship.fuel_capacity on new game / ship purchase
+    - Each jump in travel() decrements player.fuel by 1
+    - Jump blocked (with warning) if player.fuel === 0
+
+[ ] Refuelling
+    - Most planets offer refuelling (add fuel: true/false to generatePlanet())
+        Trade hubs, military, industrial: always have fuel
+        Agricultural, mining: 80% chance
+        Frontier: 50% chance
+        Pirate faction planets: never (use black market workaround if desired)
+    - Refuel cost = flat rate per jump of capacity: base 150 cr × ship tier
+      (e.g. Tier 1 ship full refuel = 6 × 150 = 900 cr; Tier 6 = 16 × 900 = 14,400 cr)
+    - Refuel button on planet landing screen when fuel < fuel_capacity and planet has fuel
+    - "Top up" only — pays for jumps remaining to fill, not a fixed full-tank price
+    - Existing Fuel Shortage event doubles refuel cost (ties into existing event system)
+
+[ ] Fuel HUD indicator
+    - Fixed-width bar in the HUD strip, same pixel width for all ships
+    - Bar is divided into fragments equal to ship.fuel_capacity
+    - Each fragment represents one jump; filled fragments shown in blue-white,
+      empty in dark grey
+    - When exactly 1 fragment remains, that fragment pulses red to warn the player
+    - Bar sits alongside the existing credits / cargo readouts
+    - Tooltip / label: "FUEL  3 / 10" on hover (or always visible as text beneath bar)
+
+[ ] Stranded state
+    - If player.fuel reaches 0 mid-flight they can still move within the system
+      but the jump button is disabled and the HUD shows "NO FUEL" in red
+    - Planet landing still works — player must land and refuel to continue
+    - If in a system with no fuel, the player is genuinely stranded; a distress
+      beacon mission could appear on the mission board of adjacent systems
+      (future hook — for now just display the warning)
+
+===========================================
+WISHLIST — FUTURE / BIG IDEAS
+===========================================
+
+Ideas that would significantly expand the game but require substantial design
+and implementation work. Not scheduled for any phase yet.
+
+---
+
+[ ] Jump Gates
+    Every system has a single jump gate acting as the sole entry and exit point
+    for smaller ships. Ships below cruiser class have no on-board jump drive and
+    must use the gate. Cruiser-class and larger carry their own jump engines and
+    can open a jump point anywhere in the system.
+
+    Gameplay implications:
+    - Gates are natural choke points — controlling or destroying one locks down
+      a system's traffic. Could create tense tactical situations for traders and
+      pirates alike.
+    - Large ships with jump engines can jump anywhere, enabling pincer manoeuvres
+      (fleet warps behind an enemy that expected them to use the gate).
+    - Gates are destructible but regenerate quickly; taking one out is a
+      disruptive but temporary play.
+    - Jump engines aboard large ships have a warm-up and cool-down window that
+      leaves the ship exposed — a trade-off vs. the convenience of the gate.
+    - The faction controlling a system can levy a gate tax on passing ships,
+      creating a steady passive income stream for the player if they hold systems.
+    - Even ships with jump engines may prefer the gate to avoid the energy cost
+      and vulnerability of a manual jump — making gate use an interesting
+      economic/risk decision rather than an obvious choice.
+
+    Design questions to resolve before implementing:
+    - Where is the gate physically placed in the system view? Fixed edge position
+      or near the star?
+    - Does the player's current ship (Shuttle etc.) have a jump drive at all, or
+      is jumping always gate-dependent until they buy a cruiser?
+    - How does gate tax interact with faction reputation?
+    - Can pirates blockade a gate? Can the player do the same?

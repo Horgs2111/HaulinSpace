@@ -7,7 +7,48 @@ let systemStates = new Map()
 
 // Game state: 'title' | 'menu' | 'options' | 'playing'
 let gameState = 'title'
-let settingsOpen = false
+let paused    = false
+
+// ─── Keybindings ──────────────────────────────────────────────────────────────
+
+const DEFAULT_KEYBINDS = {
+  thrust:    'w',
+  brake:     's',
+  turnLeft:  'a',
+  turnRight: 'd',
+  land:      'l',
+  map:       'm',
+  jump:      'j',
+  fire:      ' ',
+  pause:     'Escape'
+}
+
+let keybinds = { ...DEFAULT_KEYBINDS }
+
+function loadKeybinds() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('hs_keybinds') || 'null')
+    if (saved) keybinds = { ...DEFAULT_KEYBINDS, ...saved }
+  } catch {}
+}
+
+function saveKeybinds() {
+  localStorage.setItem('hs_keybinds', JSON.stringify(keybinds))
+}
+
+// Case-insensitive match for action keys (single-char or named keys like 'Escape')
+function matchKey(pressed, binding) {
+  if (pressed === binding) return true
+  if (binding.length === 1) return pressed.toLowerCase() === binding.toLowerCase()
+  return false
+}
+
+// Check if a movement key is currently held (handles caps lock)
+function isKeyHeld(k) {
+  if (keys[k]) return true
+  if (k.length === 1) return !!(keys[k.toLowerCase()] || keys[k.toUpperCase()])
+  return false
+}
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 
@@ -16,10 +57,20 @@ document.addEventListener('keydown', e => { keys[e.key] = true;  handleActionKey
 document.addEventListener('keyup',   e => { keys[e.key] = false })
 
 function handleActionKey(key) {
-  if (gameState !== 'playing' || jumpState || settingsOpen) return
+  if (gameState !== 'playing' || jumpState) return
+
+  // Pause key: close galaxy map → close panel → toggle pause
+  if (matchKey(key, keybinds.pause)) {
+    if (galaxyMapOpen) { closeGalaxyMap(); return }
+    if (activePanel)   { closePanel();     return }
+    paused ? closePauseMenu() : openPauseMenu()
+    return
+  }
+
+  if (paused) return
 
   // L — land
-  if ((key === 'l' || key === 'L') && !activePanel && nearPlanet && !player.landedPlanet) {
+  if (matchKey(key, keybinds.land) && !activePanel && nearPlanet && !player.landedPlanet) {
     player.vx = 0
     player.vy = 0
     player.landedPlanet = nearPlanet
@@ -27,18 +78,15 @@ function handleActionKey(key) {
   }
 
   // M — toggle galaxy map
-  if ((key === 'm' || key === 'M') && !activePanel) {
+  if (matchKey(key, keybinds.map) && !activePanel) {
     galaxyMapOpen ? closeGalaxyMap() : openGalaxyMap()
   }
 
-  // Escape — close galaxy map
-  if (key === 'Escape' && galaxyMapOpen) closeGalaxyMap()
-
   // Space — fire weapon
-  if (key === ' ' && !activePanel && !galaxyMapOpen) firePlayerWeapon()
+  if (matchKey(key, keybinds.fire) && !activePanel && !galaxyMapOpen) firePlayerWeapon()
 
   // J — initiate jump
-  if ((key === 'j' || key === 'J') && !activePanel && !galaxyMapOpen) initiateJump()
+  if (matchKey(key, keybinds.jump) && !activePanel && !galaxyMapOpen) initiateJump()
 }
 
 // ─── View transform (galaxy map overlay) ─────────────────────────────────────
@@ -302,20 +350,20 @@ function drawTitleBackground() {
 // ─── Ship physics ─────────────────────────────────────────────────────────────
 
 function updatePhysics(dt) {
-  if (dt === 0 || activePanel || player.landedPlanet || galaxyMapOpen || settingsOpen) return
+  if (dt === 0 || activePanel || player.landedPlanet || galaxyMapOpen || paused) return
 
   const TURN  = player.ship.turn_rate * 25 * Math.PI / 180
   const ACCEL = player.ship.speed     * 20
   const VMAX  = player.ship.speed     * 30
   const DAMP  = Math.exp(-dt / (player.ship.inertia / 3))
 
-  if (keys['a'] || keys['A']) player.angle -= TURN * dt
-  if (keys['d'] || keys['D']) player.angle += TURN * dt
-  if (keys['w'] || keys['W']) {
+  if (isKeyHeld(keybinds.turnLeft))  player.angle -= TURN * dt
+  if (isKeyHeld(keybinds.turnRight)) player.angle += TURN * dt
+  if (isKeyHeld(keybinds.thrust)) {
     player.vx += Math.cos(player.angle) * ACCEL * dt
     player.vy += Math.sin(player.angle) * ACCEL * dt
   }
-  if (keys['s'] || keys['S']) {
+  if (isKeyHeld(keybinds.brake)) {
     player.vx -= Math.cos(player.angle) * ACCEL * 0.6 * dt
     player.vy -= Math.sin(player.angle) * ACCEL * 0.6 * dt
   }
@@ -1519,7 +1567,7 @@ canvas.addEventListener('mouseleave', ()  => { isPanning = false })
 canvas.addEventListener('click', e => {
   if (panMoved) { panMoved = false; return }
   // Left-click in system view fires weapon
-  if (!galaxyMapOpen && gameState === 'playing' && !activePanel && !jumpState && !settingsOpen) {
+  if (!galaxyMapOpen && gameState === 'playing' && !activePanel && !jumpState && !paused) {
     firePlayerWeapon()
     return
   }
@@ -1861,28 +1909,27 @@ function draw(timestamp) {
     if (jumpState) drawJumpEffect()
     else           drawSystemView()
   } else {
-    updatePhysics(dt)
-    checkNearPlanet()
-    if (playerFireTimer > 0) playerFireTimer -= dt
-    updateEnemies(dt)
-    updateProjectiles(dt)
-    updateParticles(dt)
-    updateTraders(dt)
-    checkLootCollection()
-    if (player.hp <= 0) { triggerGameOver(); requestAnimationFrame(draw); return }
-    if (jumpWarning)   { jumpWarning.timer -= dt;   if (jumpWarning.timer <= 0)   jumpWarning = null }
-    if (missionNotify) { missionNotify.timer -= dt; if (missionNotify.timer <= 0) missionNotify = null }
-    if (eventAlert)    { eventAlert.timer -= dt;    if (eventAlert.timer <= 0)    eventAlert   = null }
+    if (!paused) {
+      updatePhysics(dt)
+      checkNearPlanet()
+      if (playerFireTimer > 0) playerFireTimer -= dt
+      updateEnemies(dt)
+      updateProjectiles(dt)
+      updateParticles(dt)
+      updateTraders(dt)
+      checkLootCollection()
+      if (player.hp <= 0) { triggerGameOver(); requestAnimationFrame(draw); return }
+      if (jumpWarning)   { jumpWarning.timer -= dt;   if (jumpWarning.timer <= 0)   jumpWarning = null }
+      if (missionNotify) { missionNotify.timer -= dt; if (missionNotify.timer <= 0) missionNotify = null }
+      if (eventAlert)    { eventAlert.timer -= dt;    if (eventAlert.timer <= 0)    eventAlert   = null }
 
-    // Thrust audio toggle
-    const isThrusting = !player.landedPlanet && !activePanel && !settingsOpen &&
-                        (keys['w'] || keys['W'] || keys['s'] || keys['S'])
-    if (isThrusting && !wasThrusting) AudioEngine.startThrust()
-    if (!isThrusting && wasThrusting) AudioEngine.stopThrust()
-    wasThrusting = isThrusting
-
-    // Music: switch to combat if enemies present
-    if (enemies.length > 0 && !wasThrusting) { /* combat music handled on spawn */ }
+      // Thrust audio toggle
+      const isThrusting = !player.landedPlanet && !activePanel &&
+                          (isKeyHeld(keybinds.thrust) || isKeyHeld(keybinds.brake))
+      if (isThrusting && !wasThrusting) AudioEngine.startThrust()
+      if (!isThrusting && wasThrusting) AudioEngine.stopThrust()
+      wasThrusting = isThrusting
+    }
 
     drawSystemView()
     if (galaxyMapOpen) drawGalaxyMapOverlay()
@@ -1895,6 +1942,7 @@ function draw(timestamp) {
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
+loadKeybinds()
 initTitleStars()
 initWarpStars()
 requestAnimationFrame(draw)

@@ -47,7 +47,7 @@ const SHIP_STAT_DEFS = [
 // ─── Panel stack ─────────────────────────────────────────────────────────────
 
 function showPanel(panelId) {
-  if (settingsOpen) closeSettings()
+  if (paused) closePauseMenu()
   if (activePanel) document.getElementById(activePanel).classList.add('hidden')
   activePanel = panelId
   panelStack.push(panelId)
@@ -62,6 +62,7 @@ function closePanel() {
     document.getElementById(activePanel).classList.remove('hidden')
   } else {
     activePanel = null
+    AudioEngine.resumeMusic()
     // Returning to space from a landed planet — give ship an outward nudge
     if (player && player.landedPlanet && gameState === 'playing') {
       player.vx = Math.cos(player.angle) * DEPART_SPEED
@@ -102,6 +103,7 @@ function openLanding(specificPlanet) {
   showPanel('panel-landing')
   AudioEngine.dock()
   AudioEngine.stopThrust()
+  AudioEngine.pauseMusic()
 }
 
 function buildPlanetBlock(planet) {
@@ -838,40 +840,36 @@ function abandonMission(missionId) {
   player.missions = player.missions.filter(m => m.id !== missionId)
 }
 
-// ─── In-game Settings panel ───────────────────────────────────────────────────
+// ─── Pause menu ───────────────────────────────────────────────────────────────
 
-function toggleSettings() {
+function openPauseMenu() {
   if (gameState !== 'playing') return
-  settingsOpen ? closeSettings() : openSettings()
+  paused = true
+  if (wasThrusting) { AudioEngine.stopThrust(); wasThrusting = false }
+  AudioEngine.pauseMusic()
+  document.getElementById('screen-pause').classList.remove('hidden')
+  document.getElementById('btn-cog').classList.add('active')
+  document.getElementById('btn-pause-load').disabled = !hasSave()
 }
 
-function openSettings() {
-  settingsOpen = true
-  const panel = document.getElementById('panel-settings')
-  panel.classList.remove('hidden')
-  document.getElementById('btn-settings').classList.add('active')
-  // Update load button state
-  document.getElementById('settings-load-btn').disabled = !hasSave()
+function closePauseMenu() {
+  paused = false
+  document.getElementById('screen-pause').classList.add('hidden')
+  document.getElementById('btn-cog').classList.remove('active')
+  AudioEngine.resumeMusic()
 }
 
-function closeSettings() {
-  settingsOpen = false
-  document.getElementById('panel-settings').classList.add('hidden')
-  document.getElementById('btn-settings').classList.remove('active')
-}
-
-function settingsSaveGame() {
+function pauseSaveGame() {
   if (gameState !== 'playing') return
   if (saveGame()) {
     missionNotify = { text: 'Game saved', timer: 2.0, success: true }
-    // Update load button now that a save exists
-    document.getElementById('settings-load-btn').disabled = false
+    document.getElementById('btn-pause-load').disabled = false
   }
 }
 
-function settingsLoadGame() {
+function pauseLoadGame() {
   if (!hasSave()) return
-  closeSettings()
+  closePauseMenu()
   if (!loadGame()) { alert('Save data could not be loaded.'); return }
   gameState = 'playing'
   document.getElementById('screen-menu').classList.add('hidden')
@@ -879,12 +877,112 @@ function settingsLoadGame() {
   document.getElementById('hud').classList.remove('hidden')
 }
 
+function pauseQuitToMenu() {
+  closePauseMenu()
+  gameState = 'menu'
+  document.getElementById('hud').classList.add('hidden')
+  document.getElementById('screen-menu').classList.remove('hidden')
+  AudioEngine.startSpaceMusic && AudioEngine.startSpaceMusic()
+}
+
 // ─── Title / Menu / Options ───────────────────────────────────────────────────
+
+// Where to return when closing options: 'menu' or 'pause'
+let optionsCaller = 'menu'
+
+// Currently active options tab
+let activeOptTab = 'audio'
+
+// Keybind rebind state
+let rebindingAction = null
+
+function showOptionsTab(tab) {
+  activeOptTab = tab
+  document.querySelectorAll('.opt-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
+  document.querySelectorAll('.opt-tab-content').forEach(c => c.classList.toggle('hidden', c.id !== 'opt-tab-' + tab))
+  if (tab === 'keys') renderKeybindingsTab()
+}
+
+const KEYBIND_LABELS = {
+  thrust:    'Thrust',
+  brake:     'Brake / Reverse',
+  turnLeft:  'Turn Left',
+  turnRight: 'Turn Right',
+  land:      'Land',
+  map:       'Galaxy Map',
+  jump:      'Jump',
+  fire:      'Fire Weapon',
+  pause:     'Pause / Menu'
+}
+
+function keyLabel(k) {
+  if (k === ' ')      return 'Space'
+  if (k === 'Escape') return 'Esc'
+  return k.toUpperCase()
+}
+
+function renderKeybindingsTab() {
+  const list = document.getElementById('keybind-list')
+  list.innerHTML = ''
+  for (const [action, label] of Object.entries(KEYBIND_LABELS)) {
+    const row = document.createElement('div')
+    row.className = 'keybind-row'
+    row.id = 'kbrow-' + action
+    row.innerHTML = `
+      <span class="keybind-label">${label}</span>
+      <span class="keybind-key" id="kbkey-${action}">${keyLabel(keybinds[action])}</span>
+      <button class="keybind-btn" onclick="startRebind('${action}')">Rebind</button>
+    `
+    list.appendChild(row)
+  }
+}
+
+function startRebind(action) {
+  if (rebindingAction) cancelRebind()
+  rebindingAction = action
+  const row = document.getElementById('kbrow-' + action)
+  if (row) row.classList.add('rebinding')
+  const keyEl = document.getElementById('kbkey-' + action)
+  if (keyEl) keyEl.textContent = 'Press key…'
+
+  function onKey(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'Escape') { cancelRebind(); document.removeEventListener('keydown', onKey, true); return }
+    // Conflict check — unassign other action if same key
+    for (const [a, k] of Object.entries(keybinds)) {
+      if (a !== action && matchKey(e.key, k)) {
+        keybinds[a] = ''
+      }
+    }
+    keybinds[action] = e.key.length === 1 ? e.key.toLowerCase() : e.key
+    saveKeybinds()
+    rebindingAction = null
+    if (row) row.classList.remove('rebinding')
+    document.removeEventListener('keydown', onKey, true)
+    renderKeybindingsTab()
+  }
+  document.addEventListener('keydown', onKey, true)
+}
+
+function cancelRebind() {
+  if (!rebindingAction) return
+  const row = document.getElementById('kbrow-' + rebindingAction)
+  if (row) row.classList.remove('rebinding')
+  rebindingAction = null
+  renderKeybindingsTab()
+}
+
+function restoreDefaultKeybinds() {
+  keybinds = { ...DEFAULT_KEYBINDS }
+  saveKeybinds()
+  renderKeybindingsTab()
+}
 
 function initMenuUI() {
   document.getElementById('btn-new-game').onclick     = startNewGame
   document.getElementById('btn-load-game').onclick    = loadSavedGame
-  document.getElementById('btn-options').onclick      = openOptions
+  document.getElementById('btn-options').onclick      = () => openOptions('menu')
   document.getElementById('btn-options-back').onclick = closeOptions
 
   // Disable Load if no save exists
@@ -898,17 +996,23 @@ function initMenuUI() {
     startNewGame()
   }
 
-  // Volume sliders — wire to AudioEngine
-  const musicSlider = document.getElementById('settings-music')
-  const sfxSlider   = document.getElementById('settings-sfx')
-  if (musicSlider) musicSlider.addEventListener('input', () => AudioEngine.setMusicVolume(+musicSlider.value))
-  if (sfxSlider)   sfxSlider.addEventListener('input',   () => AudioEngine.setSfxVolume(+sfxSlider.value))
+  // Pause menu buttons
+  document.getElementById('btn-pause-resume').onclick  = closePauseMenu
+  document.getElementById('btn-pause-save').onclick    = pauseSaveGame
+  document.getElementById('btn-pause-load').onclick    = pauseLoadGame
+  document.getElementById('btn-pause-options').onclick = () => openOptions('pause')
+  document.getElementById('btn-pause-quit').onclick    = pauseQuitToMenu
 
-  // Also wire the main options sliders
+  // Volume sliders
   const optMusic = document.getElementById('opt-music')
   const optSfx   = document.getElementById('opt-sfx')
   if (optMusic) optMusic.addEventListener('input', () => AudioEngine.setMusicVolume(+optMusic.value))
   if (optSfx)   optSfx.addEventListener('input',   () => AudioEngine.setSfxVolume(+optSfx.value))
+
+  // Options tab buttons
+  document.querySelectorAll('.opt-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => showOptionsTab(btn.dataset.tab))
+  })
 
   // Title screen: any key or click advances to menu
   document.getElementById('screen-title').addEventListener('click', showMenu)
@@ -942,16 +1046,27 @@ function loadSavedGame() {
   document.getElementById('hud').classList.remove('hidden')
 }
 
-function openOptions() {
-  gameState = 'options'
-  document.getElementById('screen-menu').classList.add('hidden')
+function openOptions(caller) {
+  optionsCaller = caller || 'menu'
+  activeOptTab = 'audio'
+  showOptionsTab('audio')
+  if (optionsCaller === 'pause') {
+    document.getElementById('screen-pause').classList.add('hidden')
+  } else {
+    gameState = 'options'
+    document.getElementById('screen-menu').classList.add('hidden')
+  }
   document.getElementById('screen-options').classList.remove('hidden')
 }
 
 function closeOptions() {
-  gameState = 'menu'
   document.getElementById('screen-options').classList.add('hidden')
-  document.getElementById('screen-menu').classList.remove('hidden')
+  if (optionsCaller === 'pause') {
+    document.getElementById('screen-pause').classList.remove('hidden')
+  } else {
+    gameState = 'menu'
+    document.getElementById('screen-menu').classList.remove('hidden')
+  }
 }
 
 initMenuUI()
