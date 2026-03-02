@@ -21,6 +21,7 @@ const DEFAULT_KEYBINDS = {
   jump:      'j',
   fire:      ' ',
   missile:   'x',
+  cycleAmmo: 'v',
   boost:     'b',
   info:      'i',
   pause:     'Escape'
@@ -122,8 +123,11 @@ function handleActionKey(key) {
   // Space — fire weapon
   if (matchKey(key, keybinds.fire)    && !activePanel && !galaxyMapOpen) firePlayerWeapon()
 
-  // X — fire missile
+  // X — fire missile / rocket
   if (matchKey(key, keybinds.missile) && !activePanel && !galaxyMapOpen) fireMissile()
+
+  // V — cycle ammo type
+  if (matchKey(key, keybinds.cycleAmmo) && !activePanel && !galaxyMapOpen) cycleAmmo()
 
   // J — initiate jump
   if (matchKey(key, keybinds.jump) && !activePanel && !galaxyMapOpen) initiateJump()
@@ -1476,16 +1480,40 @@ function calcProjectileDamage(p) {
   return Math.random() * 10 + base
 }
 
-// Pick first ammo type that has ammo and a matching launcher in weaponSlots
+// Returns all ammo types the player has a launcher for (regardless of stock)
+function getAvailableAmmoTypes() {
+  const slots = player.weaponSlots ?? []
+  return AMMO_PRIORITY.filter(type => slots.includes(AMMO_LAUNCHER[type]))
+}
+
+// Pick the player's selected ammo type if it still has stock; otherwise fall
+// back to the next available type in priority order.
 function getSelectedAmmo() {
-  const inv   = player.ammoInventory ?? {}
-  const slots = player.weaponSlots   ?? []
-  for (const type of AMMO_PRIORITY) {
-    const launcher = AMMO_LAUNCHER[type]
-    if (!slots.includes(launcher)) continue
+  const inv       = player.ammoInventory ?? {}
+  const available = getAvailableAmmoTypes()
+  if (available.length === 0) return null
+
+  // Try the pinned selection first
+  const pinned = player.selectedAmmoType
+  if (pinned && available.includes(pinned) && (inv[pinned] ?? 0) > 0) return pinned
+
+  // Fall back to first type with stock
+  for (const type of available) {
     if ((inv[type] ?? 0) > 0) return type
   }
   return null
+}
+
+// Cycle to the next available ammo type (wraps, skips types with no launcher)
+function cycleAmmo() {
+  const available = getAvailableAmmoTypes()
+  if (available.length <= 1) return
+  const cur = player.selectedAmmoType ?? available[0]
+  const idx = available.indexOf(cur)
+  player.selectedAmmoType = available[(idx + 1) % available.length]
+  updateMissileHUD()
+  const label = AMMO_LABEL[player.selectedAmmoType] ?? player.selectedAmmoType
+  missionNotify = { text: `Ammo: ${label}`, timer: 1.5, success: true }
 }
 
 function firePlayerWeapon() {
@@ -2460,8 +2488,9 @@ function initGame(difficulty = 'normal') {
     fuel:         GAME_SHIPS[0].fuel_capacity,
     upgrades:     [],
     weaponSlots:  Array.from({ length: GAME_SHIPS[0].weapon_slots }, () => 'Laser Cannon'),
-    ammoInventory: {},
-    ramscoopFrac:  0,
+    ammoInventory:    {},
+    selectedAmmoType: null,
+    ramscoopFrac:     0,
     missions:     [],
     factionRep:   Object.fromEntries(GAME_FACTIONS.map(f => [f.name, 0])),
     difficulty,
@@ -2787,8 +2816,9 @@ function saveGame(slot = currentSlot) {
         fuel:          player.fuel ?? player.ship.fuel_capacity,
         upgrades:      player.upgrades,
         weaponSlots:   player.weaponSlots  ?? [],
-        ammoInventory: player.ammoInventory ?? {},
-        ramscoopFrac:  player.ramscoopFrac  ?? 0,
+        ammoInventory:    player.ammoInventory    ?? {},
+        selectedAmmoType: player.selectedAmmoType ?? null,
+        ramscoopFrac:     player.ramscoopFrac     ?? 0,
         credits:       player.credits,
         cargo:         player.cargo,
         cargoPrices:   player.cargoPrices  ?? {},
@@ -2902,8 +2932,9 @@ function loadGame(slot) {
     if (player.shieldDelay == null)     player.shieldDelay     = 0
     if (player.armour == null)          player.armour          = 0
     if (player.armourMax == null)       player.armourMax       = 0
-    if (!player.ammoInventory)          player.ammoInventory   = {}
-    if (player.ramscoopFrac == null)    player.ramscoopFrac    = 0
+    if (!player.ammoInventory)             player.ammoInventory    = {}
+    if (player.selectedAmmoType == null)   player.selectedAmmoType = null
+    if (player.ramscoopFrac == null)       player.ramscoopFrac     = 0
     // Migrate old missileAmmo scalar to ammoInventory
     if (player.missileAmmo != null && player.missileAmmo > 0) {
       player.ammoInventory.homing_missile = (player.ammoInventory.homing_missile ?? 0) + player.missileAmmo

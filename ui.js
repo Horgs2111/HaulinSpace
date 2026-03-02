@@ -785,8 +785,9 @@ function buyShip(shipIdx) {
   player.fuel          = ship.fuel_capacity
   player.upgrades      = []
   player.weaponSlots   = Array.from({ length: ship.weapon_slots }, () => 'Laser Cannon')
-  player.ammoInventory = {}
-  player.ramscoopFrac  = 0
+  player.ammoInventory    = {}
+  player.selectedAmmoType = null
+  player.ramscoopFrac     = 0
   player.angularVelocity = 0
   computeShipStats()
 
@@ -1694,7 +1695,8 @@ const KEYBIND_LABELS = {
   map:       'Galaxy Map',
   jump:      'Jump',
   fire:      'Fire Weapon',
-  missile:   'Fire Missile',
+  missile:   'Fire Missile / Rocket',
+  cycleAmmo: 'Cycle Ammo Type',
   boost:     'Boost',
   info:      'Commander Status',
   pause:     'Pause / Menu'
