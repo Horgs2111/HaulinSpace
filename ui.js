@@ -6,6 +6,11 @@ let currentMarket = null  // { commodityId: { buy, sell } }
 let availableMissions = []
 let missionCounter    = 0
 
+// ─── Save slot picker state ───────────────────────────────────────────────────
+let slotPickerMode     = null   // 'newgame' | 'load'
+let slotPickerCaller   = null   // 'menu' | 'difficulty' | 'gameover'
+let slotPickerCallback = null   // fn(slotNum)
+
 const PIRATE_NAMES = [
   'Drek Voss', 'Kira Malcov', 'The Iron Wraith', 'Captain Sable',
   'Vorga the Red', 'Nyx Coldburn', 'Rance Hollow', 'The Blighted',
@@ -90,6 +95,12 @@ function openLanding(specificPlanet) {
   // If called without argument, show all system planets (fallback / future use).
   const toShow = specificPlanet ? [specificPlanet] : sys.planets
 
+  // Missile Launcher: replenish ammo to 5 on any landing (free resupply)
+  if (player.upgrades?.includes('Missile Launcher') && (player.missileAmmo ?? 0) < 5) {
+    player.missileAmmo = 5
+    updateMissileHUD()
+  }
+
   // Auto Refueler: top up fuel automatically on landing (10% discount)
   if (player.upgrades?.includes('Auto Refueler') && specificPlanet?.fuel) {
     const cap   = player.ship.fuel_capacity
@@ -121,6 +132,12 @@ function openLanding(specificPlanet) {
   AudioEngine.dock()
   AudioEngine.stopThrust()
   AudioEngine.pauseMusic()
+
+  // Track planets visited for statistics
+  if (specificPlanet && typeof planetsVisitedSet !== 'undefined' && !planetsVisitedSet.has(specificPlanet.id)) {
+    planetsVisitedSet.add(specificPlanet.id)
+    if (typeof playerStats !== 'undefined') playerStats.planetsVisited = planetsVisitedSet.size
+  }
 
   // Show mission-complete popups for any missions targeting this system
   if (specificPlanet) checkMissionCompletions()
@@ -227,8 +244,10 @@ function refuelShip(planetId) {
   const toBuy        = Math.min(needed, canAfford)
   if (toBuy <= 0) { missionNotify = { text: 'Not enough credits to refuel', timer: 2.0, success: false }; return }
 
-  player.credits -= toBuy * pricePerJump
+  const totalFuelCost = toBuy * pricePerJump
+  player.credits -= totalFuelCost
   player.fuel     = (player.fuel ?? cap) + toBuy
+  if (typeof playerStats !== 'undefined') playerStats.creditsSpent += totalFuelCost
   updateHUD()
   AudioEngine.trade()
 
@@ -287,8 +306,9 @@ function renderMarket() {
     const stocked  = !!prices
     const owned    = player.cargo[c.id] || 0
     const evMod    = stocked ? getEventModifier(c.id) : 1.0
-    const effBuy   = stocked ? Math.max(1, Math.round(prices.buy  * evMod)) : 0
-    const effSell  = stocked ? Math.max(1, Math.round(prices.sell * evMod)) : 0
+    const repMod   = (typeof getRepMod !== 'undefined' && currentPlanet) ? getRepMod(currentPlanet) : 1.0
+    const effBuy   = stocked ? Math.max(1, Math.round(prices.buy  * evMod * repMod)) : 0
+    const effSell  = stocked ? Math.max(1, Math.round(prices.sell * evMod / repMod)) : 0
     const canBuy   = stocked && player.credits >= effBuy && cargoUsed < player.ship.cargo
     const canSell  = stocked && owned > 0
 
@@ -342,6 +362,7 @@ function buyItem(commodityId, price) {
   const p      = price ?? Math.max(1, Math.round(currentMarket[commodityId].buy * getEventModifier(commodityId)))
   const oldQty = player.cargo[commodityId] ?? 0
   if (buyCommodity(player, commodityId, p)) {
+    if (typeof playerStats !== 'undefined') { playerStats.creditsSpent += p; playerStats.cargoTraded++ }
     // Price history for trend arrows
     if (typeof priceHistory !== 'undefined' && currentPlanet) {
       const hKey = `${currentPlanet.id}:${commodityId}`
@@ -366,6 +387,7 @@ function sellItem(commodityId, price) {
   if (!currentMarket?.[commodityId]) return
   const p = price ?? Math.max(1, Math.round(currentMarket[commodityId].sell * getEventModifier(commodityId)))
   if (sellCommodity(player, commodityId, p)) {
+    if (typeof playerStats !== 'undefined') { playerStats.creditsEarned += p; playerStats.cargoTraded++ }
     if ((player.cargo[commodityId] ?? 0) === 0 && player.cargoPrices) {
       delete player.cargoPrices[commodityId]
     }
@@ -539,6 +561,8 @@ function bmBuyItem(commodityId, price) {
   if (used >= player.ship.cargo) return
   player.credits -= price
   player.cargo[commodityId] = (player.cargo[commodityId] || 0) + 1
+  if (typeof playerStats !== 'undefined') { playerStats.creditsSpent += price; playerStats.cargoTraded++ }
+  adjustRep('Federation Navy', -3)
   AudioEngine.trade()
   updateHUD()
   renderBlackMarket()
@@ -549,6 +573,8 @@ function bmSellItem(commodityId, price) {
   player.credits += price
   player.cargo[commodityId]--
   if (player.cargo[commodityId] === 0) delete player.cargo[commodityId]
+  if (typeof playerStats !== 'undefined') { playerStats.creditsEarned += price; playerStats.cargoTraded++ }
+  adjustRep('Federation Navy', -3)
   AudioEngine.trade()
   updateHUD()
   renderBlackMarket()
@@ -559,6 +585,8 @@ function bmFenceItem(commodityId, price) {
   player.credits += price
   player.cargo[commodityId]--
   if (player.cargo[commodityId] === 0) delete player.cargo[commodityId]
+  if (typeof playerStats !== 'undefined') { playerStats.creditsEarned += price; playerStats.cargoTraded++ }
+  adjustRep('Federation Navy', -2)
   AudioEngine.trade()
   updateHUD()
   renderBlackMarket()
@@ -701,6 +729,7 @@ function buyShip(shipIdx) {
   if (player.credits < netCost) return
 
   player.credits -= netCost
+  if (typeof playerStats !== 'undefined' && netCost > 0) playerStats.creditsSpent += netCost
 
   // Transfer cargo up to new ship's capacity; discard overflow
   const newCargo   = {}
@@ -826,6 +855,7 @@ function installUpgrade(upgradeIdx) {
   if (player.ship.upgrade_slots <= 0)    return
 
   player.credits -= upgrade.price
+  if (typeof playerStats !== 'undefined') playerStats.creditsSpent += upgrade.price
   player.ship.upgrade_slots--
   player.upgrades.push(upgrade.name)
 
@@ -838,6 +868,7 @@ function installUpgrade(upgradeIdx) {
       player.ship.hull += upgrade.delta
       player.hp = Math.min(player.hp + upgrade.delta, player.ship.hull)
       break
+    case 'missile_ammo': player.missileAmmo = upgrade.delta; break
     // damage_pct and jump_cost applied in combat / travel (future phases)
   }
 
@@ -935,8 +966,10 @@ function generateMissions(planet) {
 }
 
 function openMissionBoard(planet) {
-  currentPlanet     = planet
-  availableMissions = generateMissions(planet)
+  currentPlanet = planet
+  const sys = galaxy.systems[player.system]
+  const rep = (player.factionRep ?? {})[sys.faction] ?? 0
+  availableMissions = rep <= -50 ? [] : generateMissions(planet)
   const typeLabel   = PLANET_TYPE_LABELS[planet.type] || planet.type
   document.getElementById('missionboard-planet-name').innerText = planet.name + '  ·  ' + typeLabel
   renderMissionBoard()
@@ -970,7 +1003,14 @@ function renderMissionBoard() {
 
   const list2 = document.createElement('div')
   list2.className = 'mission-list'
-  if (availableMissions.length === 0) {
+  const sys2 = galaxy.systems[player.system]
+  const rep2 = (player.factionRep ?? {})[sys2.faction] ?? 0
+  if (availableMissions.length === 0 && rep2 <= -50) {
+    const msg = document.createElement('p')
+    msg.className = 'no-planets hostile-warning'
+    msg.innerText = `⚠ Your standing with ${sys2.faction} is Hostile. No contracts available.`
+    list2.appendChild(msg)
+  } else if (availableMissions.length === 0) {
     const msg = document.createElement('p')
     msg.className = 'no-planets'
     msg.innerText = 'No missions available — this system has no connected destinations.'
@@ -1101,9 +1141,13 @@ function renderPlayerInfo() {
     ['Cargo',         `${cargoUsed} used  ·  ${cargoFree} free  ·  ${s.cargo} total`],
   ]
 
+  const diffLabel = player.difficulty
+    ? player.difficulty.charAt(0).toUpperCase() + player.difficulty.slice(1)
+    : 'Normal'
+
   let html = `
     <div class="pi-section">
-      <div class="pi-ship-name">${s.name} <span class="pi-tier">Tier ${s.tier}</span></div>
+      <div class="pi-ship-name">${s.name} <span class="pi-tier">Tier ${s.tier}</span> <span class="pi-difficulty diff-${player.difficulty ?? 'normal'}">${diffLabel}</span></div>
       <div class="pi-stat-grid">
         ${statRows.map(([l,v]) => `<div class="pi-stat-label">${l}</div><div class="pi-stat-val">${v}</div>`).join('')}
       </div>
@@ -1167,6 +1211,24 @@ function renderPlayerInfo() {
     html += `</div>`
   }
   html += `</div>`
+
+  // ── Faction standing ──
+  const factionRep = player.factionRep ?? {}
+  html += `<div class="pi-section-title">Faction Standing</div><div class="pi-section"><div class="pi-rep-list">`
+  for (const f of GAME_FACTIONS) {
+    const val   = factionRep[f.name] ?? 0
+    const label = getRepLabel(val)
+    const cls   = label === 'Allied' || label === 'Friendly' ? 'rep-good'
+                : label === 'Hostile'     ? 'rep-hostile'
+                : label === 'Unfriendly'  ? 'rep-bad'
+                : 'rep-neutral'
+    html += `<div class="pi-rep-row">
+      <span class="pi-rep-faction">${f.name}</span>
+      <span class="pi-rep-label ${cls}">${label}</span>
+      <span class="pi-rep-val">${val > 0 ? '+' : ''}${val}</span>
+    </div>`
+  }
+  html += `</div></div>`
 
   body.innerHTML = html
 }
@@ -1255,9 +1317,126 @@ function collectMissionReward() {
   if (missionCompleteQueue.length === 0) return
   const m = missionCompleteQueue.shift()
   player.credits += m.reward
+  // Stats
+  if (typeof playerStats !== 'undefined') {
+    playerStats.creditsEarned += m.reward
+    playerStats.missionsCompleted++
+  }
+  // Faction rep
+  const targetSys = galaxy.systems.find(s => s.id === m.target?.systemId)
+  if (targetSys) {
+    adjustRep(targetSys.faction, m.type === 'smuggling' ? 5 : 8)
+    if (m.type === 'smuggling') adjustRep('Federation Navy', -8)
+  }
   updateHUD()
   AudioEngine.notify(true)
   showNextMissionComplete()
+}
+
+// ─── Save slot picker ─────────────────────────────────────────────────────────
+
+function openSaveSlotPicker(mode, caller, callback) {
+  slotPickerMode     = mode
+  slotPickerCaller   = caller
+  slotPickerCallback = callback
+  renderSaveSlotPicker()
+  if (caller === 'menu')       document.getElementById('screen-menu').classList.add('hidden')
+  if (caller === 'difficulty') document.getElementById('screen-difficulty').classList.add('hidden')
+  if (caller === 'gameover')   document.getElementById('screen-gameover').classList.add('hidden')
+  document.getElementById('screen-save-slots').classList.remove('hidden')
+}
+
+function renderSaveSlotPicker() {
+  const titles = { newgame: 'Choose Save Slot', load: 'Load Game' }
+  document.getElementById('save-slots-title').innerText = titles[slotPickerMode] ?? 'Save Game'
+
+  const listEl = document.getElementById('save-slots-list')
+  listEl.innerHTML = ''
+
+  const slots = getAllSaveMeta()
+  for (const { slot, meta } of slots) {
+    const card = document.createElement('div')
+    const isEmpty = !meta
+    const isDisabled = isEmpty && slotPickerMode === 'load'
+    card.className = 'save-slot-card' +
+      (isEmpty    ? ' save-slot-empty'    : '') +
+      (isDisabled ? ' save-slot-disabled' : '')
+
+    if (!isDisabled) card.onclick = () => confirmSlotAction(slot)
+
+    if (isEmpty) {
+      card.innerHTML =
+        `<div class="save-slot-number">Slot ${slot}</div>` +
+        `<div class="save-slot-empty-label">Empty Slot</div>`
+    } else {
+      const d    = new Date(meta.timestamp)
+      const date = d.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' })
+      const time = d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' })
+      const diffLabel = meta.difficulty
+        ? meta.difficulty.charAt(0).toUpperCase() + meta.difficulty.slice(1)
+        : 'Normal'
+      card.innerHTML =
+        `<div class="save-slot-number">Slot ${slot}</div>` +
+        `<div class="save-slot-info">` +
+          `<div class="save-slot-ship">${meta.shipName}</div>` +
+          `<div class="save-slot-meta">${meta.systemName}  ·  ${meta.credits.toLocaleString()} cr  ·  ${diffLabel}  ·  ${meta.jumps} jumps</div>` +
+        `</div>` +
+        `<div class="save-slot-time">${date}<br>${time}</div>`
+    }
+
+    listEl.appendChild(card)
+  }
+}
+
+function confirmSlotAction(slot) {
+  if (slotPickerMode === 'load') {
+    document.getElementById('screen-save-slots').classList.add('hidden')
+    if (!loadGame(slot)) { alert('Save data could not be loaded.'); return }
+    gameState = 'playing'
+    document.getElementById('screen-menu').classList.add('hidden')
+    document.getElementById('screen-gameover').classList.add('hidden')
+    document.getElementById('hud').classList.remove('hidden')
+  } else {
+    // newgame mode
+    document.getElementById('screen-save-slots').classList.add('hidden')
+    if (slotPickerCallback) slotPickerCallback(slot)
+  }
+}
+
+function cancelSaveSlotPicker() {
+  document.getElementById('screen-save-slots').classList.add('hidden')
+  if (slotPickerCaller === 'difficulty') document.getElementById('screen-difficulty').classList.remove('hidden')
+  else document.getElementById('screen-menu').classList.remove('hidden')
+}
+
+// ─── Statistics panel ─────────────────────────────────────────────────────────
+
+function openStats() {
+  document.getElementById('stats-credits').innerText = (player.credits ?? 0).toLocaleString() + ' cr'
+  renderStats()
+  showPanel('panel-stats')
+}
+
+function renderStats() {
+  const body = document.getElementById('stats-body')
+  const s    = typeof playerStats !== 'undefined' ? playerStats : {}
+  const earned = s.creditsEarned ?? 0
+  const spent  = s.creditsSpent  ?? 0
+
+  const rows = [
+    ['Total Jumps',         s.jumpsTotal         ?? 0],
+    ['Planets Visited',     s.planetsVisited      ?? 0],
+    ['Enemies Destroyed',   s.enemiesDestroyed    ?? 0],
+    ['Missions Completed',  s.missionsCompleted   ?? 0],
+    ['Cargo Traded (units)', s.cargoTraded        ?? 0],
+    ['Credits Earned',      (earned).toLocaleString() + ' cr'],
+    ['Credits Spent',       (spent).toLocaleString()  + ' cr'],
+    ['Net Profit',          (earned - spent).toLocaleString() + ' cr']
+  ]
+
+  body.innerHTML = `<div class="stats-grid">${
+    rows.map(([l, v]) => `<div class="stats-label">${l}</div><div class="stats-value">${v}</div>`).join('')
+  }</div>`
 }
 
 // ─── Pause menu ───────────────────────────────────────────────────────────────
@@ -1288,9 +1467,9 @@ function pauseSaveGame() {
 }
 
 function pauseLoadGame() {
-  if (!hasSave()) return
+  if (!hasSave(currentSlot)) return
   closePauseMenu()
-  if (!loadGame()) { alert('Save data could not be loaded.'); return }
+  if (!loadGame(currentSlot)) { alert('Save data could not be loaded.'); return }
   gameState = 'playing'
   document.getElementById('screen-menu').classList.add('hidden')
   document.getElementById('screen-gameover').classList.add('hidden')
@@ -1332,6 +1511,7 @@ const KEYBIND_LABELS = {
   map:       'Galaxy Map',
   jump:      'Jump',
   fire:      'Fire Weapon',
+  missile:   'Fire Missile',
   boost:     'Boost',
   info:      'Commander Status',
   pause:     'Pause / Menu'
@@ -1410,13 +1590,22 @@ function initMenuUI() {
   // Disable Load if no save exists
   document.getElementById('btn-load-game').disabled = !hasSave()
 
-  // Game over buttons
-  document.getElementById('btn-gameover-load').onclick = loadSavedGame
-  document.getElementById('btn-gameover-load').style.display = hasSave() ? '' : 'none'
+  // Game over buttons — reload current session slot, no picker
+  document.getElementById('btn-gameover-load').onclick = () => {
+    if (!hasSave(currentSlot)) return
+    document.getElementById('screen-gameover').classList.add('hidden')
+    if (!loadGame(currentSlot)) { alert('Save data could not be loaded.'); return }
+    gameState = 'playing'
+    document.getElementById('hud').classList.remove('hidden')
+  }
+  document.getElementById('btn-gameover-load').style.display = hasSave(currentSlot) ? '' : 'none'
   document.getElementById('btn-gameover-new').onclick = () => {
     document.getElementById('screen-gameover').classList.add('hidden')
     startNewGame()
   }
+
+  // Save slot picker back button
+  document.getElementById('btn-save-slots-back').onclick = cancelSaveSlotPicker
 
   // Pause menu buttons
   document.getElementById('btn-pause-resume').onclick  = closePauseMenu
@@ -1424,6 +1613,13 @@ function initMenuUI() {
   document.getElementById('btn-pause-load').onclick    = pauseLoadGame
   document.getElementById('btn-pause-options').onclick = () => openOptions('pause')
   document.getElementById('btn-pause-quit').onclick    = pauseQuitToMenu
+  document.getElementById('btn-pause-stats').onclick   = () => { closePauseMenu(); openStats() }
+
+  // Difficulty picker buttons
+  document.querySelectorAll('.diff-btn').forEach(btn => {
+    btn.addEventListener('click', () => confirmDifficulty(btn.dataset.diff))
+  })
+  document.getElementById('btn-diff-back').onclick = cancelDifficultyPicker
 
   // Volume sliders
   const optMusic = document.getElementById('opt-music')
@@ -1451,21 +1647,32 @@ function showMenu() {
 }
 
 function startNewGame() {
-  if (hasSave() && !confirm('Start a new game? Your current save will be overwritten.')) return
-  deleteSave()
-  gameState = 'playing'
+  openDifficultyPicker()
+}
+
+function openDifficultyPicker() {
   document.getElementById('screen-menu').classList.add('hidden')
   document.getElementById('screen-gameover').classList.add('hidden')
-  document.getElementById('hud').classList.remove('hidden')
-  initGame()
+  document.getElementById('screen-difficulty').classList.remove('hidden')
+}
+
+function confirmDifficulty(diff) {
+  openSaveSlotPicker('newgame', 'difficulty', slot => {
+    deleteSave(slot)
+    currentSlot = slot
+    gameState = 'playing'
+    document.getElementById('hud').classList.remove('hidden')
+    initGame(diff)
+  })
+}
+
+function cancelDifficultyPicker() {
+  document.getElementById('screen-difficulty').classList.add('hidden')
+  document.getElementById('screen-menu').classList.remove('hidden')
 }
 
 function loadSavedGame() {
-  if (!loadGame()) { alert('Save data could not be loaded.'); return }
-  gameState = 'playing'
-  document.getElementById('screen-menu').classList.add('hidden')
-  document.getElementById('screen-gameover').classList.add('hidden')
-  document.getElementById('hud').classList.remove('hidden')
+  openSaveSlotPicker('load', 'menu', null)
 }
 
 function openOptions(caller) {

@@ -391,26 +391,29 @@ Currently all projectiles are plain coloured circles. Each weapon tier / type
 should have a distinct look (and eventually distinct behaviour).
 
 Projectile sprite / style work:
-[ ] Player bolt (1 weapon slot)    — small blue-white energy bolt, narrow rect or teardrop
-[ ] Player bolt (2–3 weapon slots) — brighter, slightly larger, twin-shot offset
-[ ] Player bolt (4–6 weapon slots) — heavy cannon round, orange/red tint, wider
-[ ] Enemy bolt                     — red/crimson energy bolt, mirror of player styles by tier
-[ ] Missile (future weapon type)   — slow, homing; distinct elongated sprite with flame trail
+[x] Player bolt (1 weapon slot)    — small blue-white energy bolt, narrow rect or teardrop
+[x] Player bolt (2–3 weapon slots) — brighter, slightly larger, twin-shot offset
+[x] Player bolt (4–6 weapon slots) — heavy cannon round, orange/red tint, wider
+[x] Enemy bolt                     — red/crimson energy bolt, mirror of player styles by tier
+[x] Missile (future weapon type)   — slow, homing; distinct elongated sprite with flame trail
 [ ] sprites/projectiles/bolt_player.png     — player energy bolt sprite (optional)
 [ ] sprites/projectiles/bolt_enemy.png      — enemy bolt sprite (optional)
 [ ] sprites/projectiles/missile.png         — missile sprite (optional)
 
 Code work:
-[ ] Add projectile.style field ('bolt_light' | 'bolt_heavy' | 'cannon') based on wslots
-[ ] Update drawProjectiles() to draw as rotated rects/shapes or sprites based on style
-[ ] Scale bolt size and glow intensity with weapon_slots tier
-[ ] Add missile weapon type to GAME_UPGRADES (homing, slow, high damage)
+[x] Add projectile.style field ('bolt_light' | 'bolt_medium' | 'bolt_heavy' | 'missile') based on wslots
+[x] Update drawProjectiles() to draw as rotated rects/shapes or sprites based on style
+[x] Scale bolt size and glow intensity with weapon_slots tier
+[x] Add missile weapon type to GAME_UPGRADES (homing, slow, high damage)
+    - Missile Launcher upgrade (18,000 cr, unique) — grants 5 missiles, replenished free on landing
+    - Fire with X key; homing (MISSILE_TURN 2.8 rad/s), 70+ damage, 5s lifetime
+    - HUD missile counter shows ammo; turns red when empty
 
 ===========================================
 PHASE 19 — REMAINING CONTENT & GAMEPLAY
 ===========================================
 
-[ ] Faction reputation system
+[x] Faction reputation system
     - Player reputation per faction (-100 to +100), starts at 0
     - Trading/missions with a faction increases rep; attacking their ships reduces it
     - High rep: better prices, exclusive missions, access to military ships
@@ -426,7 +429,7 @@ PHASE 19 — REMAINING CONTENT & GAMEPLAY
     - Soft coloured territory regions behind system nodes
     - Convex hull or radial blend around each faction's cluster
 
-[ ] Additional galactic events
+[x] Additional galactic events
     - Faction War: two factions conflict; systems contested, rep effects
     - Plague Outbreak: medicine prices ×3 in affected systems for 10 jumps
     - Gold Rush: luxuries prices ×2, player tips about a specific rich system
@@ -444,14 +447,14 @@ PHASE 19 — REMAINING CONTENT & GAMEPLAY
 [x] Galaxy map facility indicators
     - Tooltip for visited systems lists available facilities per planet (Market, Shipyard, Refuel, etc.)
 
-[ ] Difficulty settings (New Game screen)
+[x] Difficulty settings (New Game screen)
     - Easy / Normal / Hard — affects starting credits, piracy rates, combat damage
 
 [ ] Tutorial / onboarding
     - First-launch tooltip sequence covering movement, landing, market, jumping
     - Can be skipped
 
-[ ] Statistics screen
+[x] Statistics screen
     - Total jumps, credits earned, cargo traded, enemies destroyed, missions completed
     - Accessible from main menu or settings panel
 

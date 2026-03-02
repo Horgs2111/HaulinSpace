@@ -42,7 +42,10 @@ const GAME_EVENTS = [
   { name:'Trade Boom',         effect:'commodity_prices_up',   duration:10 },
   { name:'Pirate Invasion',    effect:'combat_frequency_high', duration:8  },
   { name:'Mining Rush',        effect:'ore_prices_drop',       duration:12 },
-  { name:'Fuel Shortage',      effect:'fuel_prices_up',        duration:10 }
+  { name:'Fuel Shortage',      effect:'fuel_prices_up',        duration:10 },
+  { name:'Faction War',        effect:'faction_war',           duration:12 },
+  { name:'Plague Outbreak',    effect:'plague_outbreak',       duration:10 },
+  { name:'Gold Rush',          effect:'gold_rush',             duration:8  }
 ]
 
 const GAME_UPGRADES = [
@@ -54,7 +57,8 @@ const GAME_UPGRADES = [
   { name:'Targeting Computer',        effect:'damage_pct',     delta:0.10,  price:12000, unique:true  },
   { name:'Fuel Efficiency Module',    effect:'jump_cost',      delta:-0.20, price:9000,  unique:true  },
   { name:'Long-range Scanner',        effect:'scanner_radius', delta:2,     price:15000, unique:true  },
-  { name:'Auto Refueler',             effect:'auto_refuel',    delta:0,     price:11000, unique:true  }
+  { name:'Auto Refueler',             effect:'auto_refuel',    delta:0,     price:11000, unique:true  },
+  { name:'Missile Launcher',          effect:'missile_ammo',   delta:5,     price:18000, unique:true  }
 ]
 
 // Weighted: agricultural 25%, mining 20%, industrial 15%, trade_hub 12%, military 13%, frontier 15%

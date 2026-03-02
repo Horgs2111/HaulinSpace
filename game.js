@@ -20,6 +20,7 @@ const DEFAULT_KEYBINDS = {
   map:       'm',
   jump:      'j',
   fire:      ' ',
+  missile:   'x',
   boost:     'Shift',
   info:      'i',
   pause:     'Escape'
@@ -29,6 +30,12 @@ const BOOST_DURATION = 3    // seconds boost lasts
 const BOOST_COOLDOWN = 7    // seconds before boost is available again
 const BOOST_ACCEL    = 3.0  // acceleration multiplier during boost
 const BOOST_VMAX     = 2.5  // top speed multiplier during boost
+
+const DIFF_SETTINGS = {
+  easy:   { credits: 3000, piracyMult: 0.6,  damageMult: 0.7  },
+  normal: { credits: 1000, piracyMult: 1.0,  damageMult: 1.0  },
+  hard:   { credits: 500,  piracyMult: 1.3,  damageMult: 1.35 }
+}
 
 let keybinds = { ...DEFAULT_KEYBINDS }
 
@@ -110,7 +117,10 @@ function handleActionKey(key) {
   }
 
   // Space — fire weapon
-  if (matchKey(key, keybinds.fire) && !activePanel && !galaxyMapOpen) firePlayerWeapon()
+  if (matchKey(key, keybinds.fire)    && !activePanel && !galaxyMapOpen) firePlayerWeapon()
+
+  // X — fire missile
+  if (matchKey(key, keybinds.missile) && !activePanel && !galaxyMapOpen) fireMissile()
 
   // J — initiate jump
   if (matchKey(key, keybinds.jump) && !activePanel && !galaxyMapOpen) initiateJump()
@@ -236,6 +246,13 @@ let priceHistory         = new Map()        // 'planetId:commodityId' → [last 
 let missionCompleteQueue = []               // missions awaiting collect-reward popup
 let boostTimer           = 0               // seconds remaining on active boost
 let boostCooldown        = 0               // seconds until boost is available again
+
+// ── Phase 19 — Faction reputation + statistics ────────────────────────────────
+let playerStats = {
+  jumpsTotal: 0, creditsEarned: 0, creditsSpent: 0,
+  missionsCompleted: 0, enemiesDestroyed: 0, cargoTraded: 0, planetsVisited: 0
+}
+let planetsVisitedSet = new Set()
 
 // Pre-generated star positions for warp animation (lateral-scroll design)
 const WARP_STARS = []
@@ -1091,8 +1108,38 @@ function getEventModifier(commodityId) {
     if (e.effect === 'commodity_prices_up' && e.commodityId === commodityId) mod *= 1.50
     if (e.effect === 'ore_prices_drop'     && commodityId === 'ore')           mod *= 0.50
     if (e.effect === 'fuel_prices_up'      && commodityId === 'fuel')          mod *= 2.00
+    if (e.effect === 'plague_outbreak'     && commodityId === 'medicine')      mod *= 3.00
+    if (e.effect === 'gold_rush'           && commodityId === 'luxuries')      mod *= 2.00
   }
   return mod
+}
+
+// ─── Faction reputation helpers ───────────────────────────────────────────────
+
+function adjustRep(factionName, delta) {
+  if (!player?.factionRep) return
+  const cur = player.factionRep[factionName] ?? 0
+  player.factionRep[factionName] = Math.max(-100, Math.min(100, cur + delta))
+}
+
+function getRepLabel(val) {
+  if (val >=  75) return 'Allied'
+  if (val >=  25) return 'Friendly'
+  if (val >  -25) return 'Neutral'
+  if (val >  -75) return 'Unfriendly'
+  return 'Hostile'
+}
+
+// Returns a price multiplier based on reputation with a planet's faction.
+// < 1.0 = discount (good rep), > 1.0 = penalty (bad rep)
+function getRepMod(planet) {
+  if (!player?.factionRep || !planet?.faction) return 1.0
+  const rep = player.factionRep[planet.faction] ?? 0
+  if (rep >=  50) return 0.90
+  if (rep >=  25) return 0.95
+  if (rep <= -50) return 1.10
+  if (rep <= -25) return 1.05
+  return 1.0
 }
 
 function hexToRgba(hex, a) {
@@ -1145,6 +1192,18 @@ const PROJ_LIFETIME       = 1.8  // seconds before expiry
 const PROJ_HIT_RADIUS     = 14   // world units — collision threshold
 const LOOT_COLLECT_RADIUS = 55   // world units — auto-collect loot
 
+const MISSILE_SPEED       = 210  // slower than bolts
+const MISSILE_LIFETIME    = 5.0  // seconds
+const MISSILE_TURN        = 2.8  // radians/second homing rate
+const MISSILE_DAMAGE      = 70   // base damage per hit
+const MISSILE_HIT_RADIUS  = 20   // larger hit radius than bolts
+
+function getBoltStyle(wslots) {
+  if (wslots >= 4) return 'bolt_heavy'
+  if (wslots >= 2) return 'bolt_medium'
+  return 'bolt_light'
+}
+
 function clearCombat() {
   enemies         = []
   projectiles     = []
@@ -1179,8 +1238,12 @@ function spawnBountyTargets(sys) {
 }
 
 function spawnPirates(sys) {
-  const invasion       = activeEvents.some(e => e.effect === 'combat_frequency_high')
-  const effectivePiracy = invasion ? Math.min(1.0, sys.piracyLevel * 2) : sys.piracyLevel
+  const invasion    = activeEvents.some(e => e.effect === 'combat_frequency_high')
+  const warEvent    = activeEvents.find(e => e.effect === 'faction_war' && e.warFactions?.includes(sys.faction))
+  const diff        = DIFF_SETTINGS[player.difficulty ?? 'normal']
+  let effectivePiracy = invasion ? Math.min(1.0, sys.piracyLevel * 2) : sys.piracyLevel
+  if (warEvent) effectivePiracy = Math.min(1.0, effectivePiracy * 1.6)
+  effectivePiracy = Math.min(1.0, effectivePiracy * diff.piracyMult)
   if (Math.random() > effectivePiracy) return
   AudioEngine.startCombatMusic()
 
@@ -1206,19 +1269,62 @@ function spawnPirates(sys) {
 
 function firePlayerWeapon() {
   if (playerFireTimer > 0 || player.landedPlanet || activePanel || jumpState || galaxyMapOpen) return
-  playerFireTimer = 0.5 / player.ship.weapon_slots
-  const px = player.x + Math.cos(player.angle) * 16
-  const py = player.y + Math.sin(player.angle) * 16
+  const wslots = player.ship.weapon_slots
+  const style  = getBoltStyle(wslots)
+  playerFireTimer = 0.5 / wslots
+
+  const angle  = player.angle
+  const cos    = Math.cos(angle)
+  const sin    = Math.sin(angle)
+  const baseX  = player.x + cos * 16
+  const baseY  = player.y + sin * 16
+  const bvx    = player.vx + cos * PROJ_SPEED
+  const bvy    = player.vy + sin * PROJ_SPEED
+
+  if (style === 'bolt_medium') {
+    // Twin shot — two bolts offset ±5px perpendicular to firing direction
+    const offset = 5
+    for (const side of [-1, 1]) {
+      projectiles.push({
+        x: baseX + (-sin) * offset * side,
+        y: baseY + cos    * offset * side,
+        vx: bvx, vy: bvy,
+        owner: 'player', timer: PROJ_LIFETIME,
+        style, angle
+      })
+    }
+  } else {
+    projectiles.push({
+      x: baseX, y: baseY, vx: bvx, vy: bvy,
+      owner: 'player', timer: PROJ_LIFETIME,
+      style, angle
+    })
+  }
+
+  spawnParticles(baseX, baseY, player.vx, player.vy, 'muzzle', style === 'bolt_heavy' ? 7 : 4)
+  AudioEngine.fire()
+}
+
+function fireMissile() {
+  if (!player || player.landedPlanet || activePanel || jumpState || galaxyMapOpen) return
+  if ((player.missileAmmo ?? 0) <= 0) {
+    missionNotify = { text: 'No missiles — reload at a planet', timer: 2.0, success: false }
+    return
+  }
+  player.missileAmmo--
+  updateMissileHUD()
+
+  const angle = player.angle
   projectiles.push({
-    x:      px,
-    y:      py,
-    vx:     player.vx + Math.cos(player.angle) * PROJ_SPEED,
-    vy:     player.vy + Math.sin(player.angle) * PROJ_SPEED,
-    owner:  'player',
-    timer:  PROJ_LIFETIME,
-    wslots: player.ship.weapon_slots
+    x:     player.x + Math.cos(angle) * 22,
+    y:     player.y + Math.sin(angle) * 22,
+    vx:    player.vx + Math.cos(angle) * MISSILE_SPEED,
+    vy:    player.vy + Math.sin(angle) * MISSILE_SPEED,
+    owner: 'player',
+    timer: MISSILE_LIFETIME,
+    style: 'missile',
+    angle
   })
-  spawnParticles(px, py, player.vx, player.vy, 'muzzle', 4)
   AudioEngine.fire()
 }
 
@@ -1254,15 +1360,18 @@ function updateEnemies(dt) {
     e.fireTimer -= dt
     if (dist < WEAPON_RANGE && Math.abs(diff) < 0.28 && e.fireTimer <= 0) {
       e.fireTimer = 1.8 / e.ship.weapon_slots
-      const spread = (Math.random() - 0.5) * 0.18  // ±5° inaccuracy
+      const spread    = (Math.random() - 0.5) * 0.18  // ±5° inaccuracy
+      const eAngle    = e.angle + spread
+      const eStyle    = getBoltStyle(e.ship.weapon_slots)
       projectiles.push({
         x:      e.x + Math.cos(e.angle) * 14,
         y:      e.y + Math.sin(e.angle) * 14,
-        vx:     Math.cos(e.angle + spread) * PROJ_SPEED,
-        vy:     Math.sin(e.angle + spread) * PROJ_SPEED,
+        vx:     Math.cos(eAngle) * PROJ_SPEED,
+        vy:     Math.sin(eAngle) * PROJ_SPEED,
         owner:  'enemy',
         timer:  PROJ_LIFETIME,
-        wslots: e.ship.weapon_slots
+        style:  eStyle,
+        angle:  eAngle
       })
     }
   }
@@ -1271,26 +1380,61 @@ function updateEnemies(dt) {
 function updateProjectiles(dt) {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const p = projectiles[i]
+
+    // Missile homing — steer toward nearest enemy before moving
+    if (p.style === 'missile' && p.owner === 'player' && enemies.length > 0) {
+      let nearest = null, bestDist = Infinity
+      for (const e of enemies) {
+        const d = Math.hypot(p.x - e.x, p.y - e.y)
+        if (d < bestDist) { bestDist = d; nearest = e }
+      }
+      if (nearest) {
+        const desired = Math.atan2(nearest.y - p.y, nearest.x - p.x)
+        let diff = desired - p.angle
+        while (diff >  Math.PI) diff -= Math.PI * 2
+        while (diff < -Math.PI) diff += Math.PI * 2
+        p.angle += Math.min(Math.abs(diff), MISSILE_TURN * dt) * Math.sign(diff)
+        const spd = Math.hypot(p.vx, p.vy)
+        p.vx = Math.cos(p.angle) * spd
+        p.vy = Math.sin(p.angle) * spd
+      }
+      // Flame trail
+      if (Math.random() < 0.5) spawnParticles(p.x, p.y, -p.vx * 0.15, -p.vy * 0.15, 'exhaust', 1)
+    }
+
     p.x    += p.vx * dt
     p.y    += p.vy * dt
     p.timer -= dt
     if (p.timer <= 0) { projectiles.splice(i, 1); continue }
 
+    const hitRadius = p.style === 'missile' ? MISSILE_HIT_RADIUS : PROJ_HIT_RADIUS
+
     let hit = false
     if (p.owner === 'player') {
       for (let j = enemies.length - 1; j >= 0; j--) {
-        if (Math.hypot(p.x - enemies[j].x, p.y - enemies[j].y) < PROJ_HIT_RADIUS) {
-          enemies[j].hp -= Math.round(Math.random() * 10 + p.wslots * 7)
-          spawnParticles(p.x, p.y, p.vx, p.vy, 'hit', 6)
+        if (Math.hypot(p.x - enemies[j].x, p.y - enemies[j].y) < hitRadius) {
+          const dmg = p.style === 'missile'
+            ? Math.round(Math.random() * 20 + MISSILE_DAMAGE)
+            : Math.round(Math.random() * 10 + (p.style === 'bolt_heavy' ? 42 : p.style === 'bolt_medium' ? 22 : 14))
+          enemies[j].hp -= dmg
+          spawnParticles(p.x, p.y, p.vx, p.vy, p.style === 'missile' ? 'explosion' : 'hit', p.style === 'missile' ? 18 : 6)
           AudioEngine.hit()
           if (enemies[j].hp <= 0) {
             const e = enemies[j]
             spawnParticles(e.x, e.y, e.vx, e.vy, 'explosion', 28)
             AudioEngine.explosion()
+            playerStats.enemiesDestroyed++
+            // Pirate kills: lose pirate rep, gain navy rep
+            adjustRep('Outer Rim Pirates', -3)
+            adjustRep('Federation Navy', 2)
             if (e.bountyMissionId && player.missions) {
               const bm = player.missions.find(m => m.id === e.bountyMissionId)
               if (bm) {
                 player.credits += bm.reward
+                playerStats.creditsEarned += bm.reward
+                playerStats.missionsCompleted++
+                adjustRep('Federation Navy', 5)
+                adjustRep('Outer Rim Pirates', -5)
                 player.missions = player.missions.filter(m => m.id !== bm.id)
                 missionNotify = { text: `${bm.title}  +${bm.reward.toLocaleString()} cr`, timer: 3.5, success: true }
                 AudioEngine.notify(true)
@@ -1303,8 +1447,10 @@ function updateProjectiles(dt) {
         }
       }
     } else {
-      if (Math.hypot(p.x - player.x, p.y - player.y) < PROJ_HIT_RADIUS) {
-        player.hp = Math.max(0, player.hp - Math.round(Math.random() * 10 + p.wslots * 7))
+      if (Math.hypot(p.x - player.x, p.y - player.y) < hitRadius) {
+        const diffMult = DIFF_SETTINGS[player.difficulty ?? 'normal'].damageMult
+        const eDmg = p.style === 'bolt_heavy' ? 42 : p.style === 'bolt_medium' ? 22 : 14
+        player.hp = Math.max(0, player.hp - Math.round((Math.random() * 10 + eDmg) * diffMult))
         spawnParticles(p.x, p.y, p.vx, p.vy, 'hit', 5)
         AudioEngine.hit()
         hit = true
@@ -1350,9 +1496,9 @@ function triggerGameOver() {
   gameState = 'gameover'
   document.getElementById('screen-gameover').classList.remove('hidden')
   document.getElementById('hud').classList.add('hidden')
-  // Show "Load Last Save" only when a save exists
+  // Show "Load Last Save" only when the current session slot has a save
   const loadBtn = document.getElementById('btn-gameover-load')
-  if (loadBtn) loadBtn.style.display = hasSave() ? '' : 'none'
+  if (loadBtn) loadBtn.style.display = hasSave(currentSlot) ? '' : 'none'
 }
 
 // ─── Combat draw ──────────────────────────────────────────────────────────────
@@ -1383,12 +1529,52 @@ function drawEnemies() {
 function drawProjectiles() {
   for (const p of projectiles) {
     ctx.save()
-    if (p.owner === 'player') {
-      ctx.shadowColor = '#88ddff'; ctx.shadowBlur = 7; ctx.fillStyle = '#bbeeff'
-    } else {
-      ctx.shadowColor = '#ff7755'; ctx.shadowBlur = 7; ctx.fillStyle = '#ffaa88'
+    ctx.translate(p.x, p.y)
+    ctx.rotate(p.angle ?? Math.atan2(p.vy, p.vx))
+
+    const ip = p.owner === 'player'
+
+    if (p.style === 'missile') {
+      // Elongated body
+      ctx.shadowColor = '#ff9933'; ctx.shadowBlur = 14
+      ctx.fillStyle   = '#ffcc44'
+      ctx.beginPath(); ctx.ellipse(0, 0, 11, 3.5, 0, 0, Math.PI * 2); ctx.fill()
+      // Bright nose
+      ctx.shadowBlur  = 0
+      ctx.fillStyle   = '#ffffff'
+      ctx.beginPath(); ctx.ellipse(9, 0, 4, 2, 0, 0, Math.PI * 2); ctx.fill()
+      // Tail fin hint
+      ctx.fillStyle = '#cc8800'
+      ctx.fillRect(-11, -4, 5, 8)
+
+    } else if (p.style === 'bolt_light') {
+      ctx.shadowColor = ip ? '#66ccff' : '#ff5533'
+      ctx.shadowBlur  = ip ? 8 : 7
+      ctx.fillStyle   = ip ? '#cceeff' : '#ffaa88'
+      ctx.fillRect(-8, -1.5, 13, 3)
+
+    } else if (p.style === 'bolt_medium') {
+      ctx.shadowColor = ip ? '#33aaff' : '#ff3311'
+      ctx.shadowBlur  = ip ? 14 : 12
+      ctx.fillStyle   = ip ? '#88ddff' : '#ff7755'
+      ctx.fillRect(-9, -2.5, 15, 5)
+      // Bright core
+      ctx.shadowBlur  = 0
+      ctx.fillStyle   = ip ? '#ddf6ff' : '#ffccaa'
+      ctx.fillRect(-6, -1.2, 10, 2.4)
+
+    } else { // bolt_heavy
+      ctx.shadowColor = ip ? '#ff8833' : '#ff0000'
+      ctx.shadowBlur  = ip ? 22 : 18
+      // Outer body
+      ctx.fillStyle   = ip ? '#ff9944' : '#ff4422'
+      ctx.fillRect(-12, -4, 21, 8)
+      // Bright hot core
+      ctx.shadowBlur  = 0
+      ctx.fillStyle   = ip ? '#ffffcc' : '#ffbbbb'
+      ctx.fillRect(-8, -2, 15, 4)
     }
-    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill()
+
     ctx.restore()
   }
 }
@@ -1681,6 +1867,13 @@ function spawnParticles(wx, wy, baseVx, baseVy, type, count) {
       p.life    = 0.18 + Math.random() * 0.22
       p.color   = Math.random() < 0.5 ? '#ffaa33' : (Math.random() < 0.5 ? '#ffdd66' : '#ff6622')
       p.size    = 2.0 + Math.random() * 2.5
+    } else if (type === 'exhaust') {
+      // Missile flame trail — small, fast-fading orange ember
+      p.vx      = baseVx + Math.cos(angle) * (20 + Math.random() * 40)
+      p.vy      = baseVy + Math.sin(angle) * (20 + Math.random() * 40)
+      p.life    = 0.08 + Math.random() * 0.12
+      p.color   = Math.random() < 0.6 ? '#ff8833' : '#ffcc44'
+      p.size    = 1.2 + Math.random() * 2.0
     }
 
     p.maxLife = p.life
@@ -1901,6 +2094,24 @@ function fireRandomEvent() {
     ev.commodityId = 'fuel'
     alertDesc      = `Refinery crisis across all sectors — Fuel prices doubled for ${def.duration} jumps.`
   }
+  else if (def.effect === 'faction_war') {
+    const nonPirate = GAME_FACTIONS.filter(f => f.type !== 'pirate')
+    const idxA = Math.floor(Math.random() * nonPirate.length)
+    const idxB = (idxA + 1 + Math.floor(Math.random() * (nonPirate.length - 1))) % nonPirate.length
+    ev.warFactions = [nonPirate[idxA].name, nonPirate[idxB].name]
+    alertDesc = `${ev.warFactions[0]} and ${ev.warFactions[1]} are at war — piracy surges in contested sectors for ${def.duration} jumps.`
+  }
+  else if (def.effect === 'plague_outbreak') {
+    ev.commodityId = 'medicine'
+    alertDesc = `A virulent plague is spreading — Medicine prices have tripled for ${def.duration} jumps.`
+  }
+  else if (def.effect === 'gold_rush') {
+    ev.commodityId = 'luxuries'
+    const visited = galaxy.systems.filter(s => systemStates.get(s.id) === 'visited')
+    const rich    = visited[Math.floor(Math.random() * visited.length)]
+    alertDesc = `Luxury goods are surging in value — Luxuries doubled for ${def.duration} jumps.` +
+      (rich ? ` Tip: ${rich.name} may be a strong market.` : '')
+  }
 
   activeEvents.push(ev)
   eventAlert  = { title: def.name, desc: alertDesc, timer: 5.0 }
@@ -1908,7 +2119,7 @@ function fireRandomEvent() {
   AudioEngine.alert()
 }
 
-function initGame() {
+function initGame(difficulty = 'normal') {
   galaxy        = generateGalaxy(100)
   planetMarkets = new Map()
   systemStates  = new Map()
@@ -1922,6 +2133,8 @@ function initGame() {
   eventAlert    = null
   autopilot     = null
   priceHistory  = new Map()
+  playerStats   = { jumpsTotal:0, creditsEarned:0, creditsSpent:0, missionsCompleted:0, enemiesDestroyed:0, cargoTraded:0, planetsVisited:0 }
+  planetsVisitedSet = new Set()
 
   setSystemState(0, 'visited')
   galaxy.systems[0].connections.forEach(id => setSystemState(id, 'discovered'))
@@ -1935,7 +2148,7 @@ function initGame() {
   player = {
     system:       0,
     ship:         Object.assign({}, GAME_SHIPS[0]),
-    credits:      1000,
+    credits:      DIFF_SETTINGS[difficulty].credits,
     cargo:        {},
     cargoPrices:  {},
     missionCargo: {},
@@ -1943,6 +2156,9 @@ function initGame() {
     fuel:         GAME_SHIPS[0].fuel_capacity,
     upgrades:     [],
     missions:     [],
+    factionRep:   Object.fromEntries(GAME_FACTIONS.map(f => [f.name, 0])),
+    difficulty,
+    missileAmmo:  0,
     x:            startX,
     y:            startY,
     angle:        Math.PI,
@@ -1993,6 +2209,7 @@ function travel(targetId) {
 
   // ── Event tracking ────────────────────────────────────────────────────────
   jumpCount++
+  playerStats.jumpsTotal++
   if (jumpCount >= nextEventAt) fireRandomEvent()
   for (const e of activeEvents) e.jumpsLeft--
   activeEvents = activeEvents.filter(e => e.jumpsLeft > 0)
@@ -2054,6 +2271,7 @@ function updateHUD() {
   const cargoUsed = Object.values(player.cargo).reduce((s, n) => s + n, 0)
   document.getElementById('hud-cargo').innerText    = cargoUsed + ' / ' + player.ship.cargo
   updateFuelHUD()
+  updateMissileHUD()
 }
 
 function updateFuelHUD() {
@@ -2077,14 +2295,51 @@ function updateFuelHUD() {
   text.className = fuel === 0 ? 'hud-fuel-text hud-fuel-empty' : 'hud-fuel-text'
 }
 
+function updateMissileHUD() {
+  const el  = document.getElementById('hud-missile')
+  const sep = document.querySelector('.hud-missile-sep')
+  if (!el || !player) return
+  const hasMissileLauncher = player.upgrades && player.upgrades.includes('Missile Launcher')
+  if (!hasMissileLauncher) {
+    el.classList.add('hidden'); if (sep) sep.classList.add('hidden'); return
+  }
+  el.classList.remove('hidden'); if (sep) sep.classList.remove('hidden')
+  const ammo = player.missileAmmo ?? 0
+  document.getElementById('hud-missile-count').innerText = ammo
+  el.className = 'hud-missile' + (ammo === 0 ? ' msl-empty' : '')
+}
+
 // ─── Save / Load ──────────────────────────────────────────────────────────────
 
-const SAVE_KEY = 'haulinspace_save'
+const SAVE_KEY_PREFIX  = 'haulinspace_save_'
+const SAVE_META_PREFIX = 'haulinspace_meta_'
+let   currentSlot      = 1    // which slot this session auto-saves to
 
-function hasSave()   { return !!localStorage.getItem(SAVE_KEY) }
-function deleteSave() { localStorage.removeItem(SAVE_KEY) }
+function getSaveKey(slot)  { return SAVE_KEY_PREFIX  + slot }
+function getSaveMetaKey(s) { return SAVE_META_PREFIX + s    }
 
-function saveGame() {
+function hasSave(slot) {
+  if (slot) return !!localStorage.getItem(getSaveKey(slot))
+  return [1,2,3,4,5].some(s => !!localStorage.getItem(getSaveKey(s)))
+}
+
+function deleteSave(slot) {
+  localStorage.removeItem(getSaveKey(slot))
+  localStorage.removeItem(getSaveMetaKey(slot))
+}
+
+function getSlotMeta(slot) {
+  try {
+    const raw = localStorage.getItem(getSaveMetaKey(slot))
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function getAllSaveMeta() {
+  return [1,2,3,4,5].map(s => ({ slot: s, meta: getSlotMeta(s) }))
+}
+
+function saveGame(slot = currentSlot) {
   if (!galaxy || !player) return false
   try {
     const data = {
@@ -2101,6 +2356,9 @@ function saveGame() {
         cargoPrices:  player.cargoPrices  ?? {},
         missionCargo: player.missionCargo ?? {},
         missions:     player.missions ?? [],
+        factionRep:   player.factionRep  ?? {},
+        difficulty:   player.difficulty  ?? 'normal',
+        missileAmmo:  player.missileAmmo ?? 0,
         x:            player.x,
         y:            player.y,
         angle:        player.angle,
@@ -2128,10 +2386,22 @@ function saveGame() {
       jumpCount,
       nextEventAt,
       jumpTarget,
-      priceHistory:   [...priceHistory.entries()],
-      missionCounter: typeof missionCounter !== 'undefined' ? missionCounter : 0
+      priceHistory:      [...priceHistory.entries()],
+      missionCounter:    typeof missionCounter !== 'undefined' ? missionCounter : 0,
+      playerStats:       playerStats ?? {},
+      planetsVisitedSet: [...planetsVisitedSet]
     }
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data))
+    localStorage.setItem(getSaveKey(slot), JSON.stringify(data))
+    // Write compact metadata for slot picker display
+    const meta = {
+      shipName:   player.ship.name,
+      systemName: galaxy.systems[player.system].name,
+      credits:    player.credits,
+      difficulty: player.difficulty ?? 'normal',
+      jumps:      jumpCount,
+      timestamp:  Date.now()
+    }
+    localStorage.setItem(getSaveMetaKey(slot), JSON.stringify(meta))
     return true
   } catch (e) {
     console.warn('Save failed:', e)
@@ -2139,9 +2409,10 @@ function saveGame() {
   }
 }
 
-function loadGame() {
+function loadGame(slot) {
+  const s = slot ?? currentSlot
   try {
-    const raw = localStorage.getItem(SAVE_KEY)
+    const raw = localStorage.getItem(getSaveKey(s))
     if (!raw) return false
     const data = JSON.parse(raw)
     if (!data.version || !data.galaxy || !data.player) return false
@@ -2185,6 +2456,12 @@ function loadGame() {
     if (player.fuel == null)         player.fuel         = player.ship.fuel_capacity ?? 6
     if (!player.cargoPrices)         player.cargoPrices  = {}
     if (!player.missionCargo)        player.missionCargo = {}
+    if (!player.factionRep)          player.factionRep   = Object.fromEntries(GAME_FACTIONS.map(f => [f.name, 0]))
+    else GAME_FACTIONS.forEach(f => { if (!(f.name in player.factionRep)) player.factionRep[f.name] = 0 })
+    if (!player.difficulty)          player.difficulty   = 'normal'
+    if (player.missileAmmo == null)  player.missileAmmo  = 0
+    playerStats       = data.playerStats ?? { jumpsTotal:0, creditsEarned:0, creditsSpent:0, missionsCompleted:0, enemiesDestroyed:0, cargoTraded:0, planetsVisited:0 }
+    planetsVisitedSet = new Set(data.planetsVisitedSet ?? [])
     nearPlanet    = null
     lastFrameTime = 0
     clearCombat()
@@ -2192,6 +2469,7 @@ function loadGame() {
     buildSystemLayout(galaxy.systems[player.system])
     updateHUD()
     updateJumpHUD()
+    currentSlot = s
     return true
   } catch (e) {
     console.warn('Load failed:', e)
@@ -2203,6 +2481,34 @@ function hudSaveGame() {
   if (gameState !== 'playing') return
   if (saveGame()) missionNotify = { text: 'Game saved', timer: 2.0, success: true }
 }
+
+// Migrate a legacy single-slot save (haulinspace_save) to slot 1
+function migrateLegacySave() {
+  const LEGACY_KEY = 'haulinspace_save'
+  const raw = localStorage.getItem(LEGACY_KEY)
+  if (!raw) return
+  if ([1,2,3,4,5].some(s => localStorage.getItem(getSaveKey(s)))) return // slots already exist
+  try {
+    const data = JSON.parse(raw)
+    localStorage.setItem(getSaveKey(1), raw)
+    if (data.player && data.galaxy) {
+      const meta = {
+        shipName:   data.player.ship?.name ?? '?',
+        systemName: data.galaxy.systems?.[data.player.system]?.name ?? '?',
+        credits:    data.player.credits ?? 0,
+        difficulty: data.player.difficulty ?? 'normal',
+        jumps:      data.jumpCount ?? 0,
+        timestamp:  data.timestamp ?? Date.now()
+      }
+      localStorage.setItem(getSaveMetaKey(1), JSON.stringify(meta))
+    }
+    localStorage.removeItem(LEGACY_KEY)
+  } catch (e) {
+    console.warn('Legacy save migration failed:', e)
+  }
+}
+
+migrateLegacySave()
 
 // ─── Draw loop ────────────────────────────────────────────────────────────────
 

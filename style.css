@@ -124,6 +124,25 @@ canvas {
   font-weight: 700;
 }
 
+.hud-missile {
+  font-size: 11px;
+  color: #88aacc;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.hud-missile span {
+  font-weight: 700;
+  color: #ffcc44;
+}
+
+.hud-missile.msl-empty span {
+  color: #cc4444;
+}
+
 .btn-cog {
   margin-left: auto;
   background: none;
@@ -1576,3 +1595,234 @@ canvas {
 }
 
 .upgrade-row:hover .upgrade-tooltip-box { display: block; }
+
+/* ─── Difficulty picker ────────────────────────────────────────────────────── */
+
+.diff-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 48px 32px;
+}
+
+.diff-title {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #e0eaff;
+  text-shadow: 0 0 18px #4488ff88;
+}
+
+.diff-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 480px;
+}
+
+.diff-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px 24px;
+  background: rgba(30, 45, 80, 0.7);
+  border: 1px solid #2a3a60;
+  border-radius: 8px;
+  color: #c8d8f8;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+
+.diff-btn:hover {
+  background: rgba(50, 80, 140, 0.8);
+  border-color: #4488ff;
+  box-shadow: 0 0 14px rgba(68, 136, 255, 0.35);
+}
+
+.diff-btn-normal { border-color: #3366aa; }
+.diff-btn-hard   { border-color: #883333; }
+.diff-btn-hard:hover { background: rgba(100, 40, 40, 0.8); border-color: #ff5555; box-shadow: 0 0 14px rgba(255,60,60,0.35); }
+
+.diff-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e0eaff;
+  letter-spacing: 0.05em;
+}
+
+.diff-desc {
+  font-size: 0.82rem;
+  color: #7890bb;
+}
+
+.diff-back-btn {
+  margin-top: 8px;
+}
+
+/* ─── Reputation labels ────────────────────────────────────────────────────── */
+
+.rep-good    { color: #44dd88; }
+.rep-neutral { color: #8899bb; }
+.rep-bad     { color: #ffaa44; }
+.rep-hostile { color: #ff5555; }
+
+.hostile-warning { color: #ff6666 !important; font-weight: 600; }
+
+/* ─── Player info — rep section ───────────────────────────────────────────── */
+
+.pi-rep-list { display: flex; flex-direction: column; gap: 6px; }
+
+.pi-rep-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+
+.pi-rep-faction { flex: 1; color: #a0b4d0; }
+.pi-rep-label   { width: 90px; font-weight: 600; }
+.pi-rep-val     { width: 42px; text-align: right; color: #7080a0; font-size: 0.80rem; }
+
+/* ─── Difficulty badge in player info ─────────────────────────────────────── */
+
+.pi-difficulty {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 8px;
+  letter-spacing: 0.06em;
+}
+
+.diff-easy   { background: rgba(68,221,136,0.18); color: #44dd88; border: 1px solid #44dd8844; }
+.diff-normal { background: rgba(68,136,255,0.18); color: #6699ff; border: 1px solid #4488ff44; }
+.diff-hard   { background: rgba(255,80,80,0.18);  color: #ff6666; border: 1px solid #ff555544; }
+
+/* ─── Statistics panel ─────────────────────────────────────────────────────── */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 24px;
+  padding: 8px 0;
+  max-width: 480px;
+}
+
+.stats-label {
+  font-size: 0.9rem;
+  color: #8899bb;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(68, 100, 180, 0.15);
+}
+
+.stats-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #c8d8f8;
+  text-align: right;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(68, 100, 180, 0.15);
+  white-space: nowrap;
+}
+
+/* ─── Save slot picker ──────────────────────────────────────────────────────── */
+
+.save-slots-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  background: rgba(8, 14, 32, 0.97);
+  border: 1px solid rgba(68, 136, 255, 0.35);
+  border-radius: 12px;
+  padding: 40px 48px;
+  min-width: 560px;
+  max-width: 680px;
+  box-shadow: 0 0 48px rgba(40, 80, 200, 0.2);
+}
+
+.save-slots-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #c8d8f8;
+  text-transform: uppercase;
+}
+
+.save-slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.save-slot-card {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  background: rgba(20, 35, 70, 0.6);
+  border: 1px solid rgba(68, 100, 180, 0.3);
+  border-radius: 8px;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.save-slot-card:hover {
+  background: rgba(30, 55, 120, 0.75);
+  border-color: #4488ff;
+  box-shadow: 0 0 14px rgba(68, 136, 255, 0.25);
+}
+
+.save-slot-empty {
+  opacity: 0.45;
+  font-style: italic;
+}
+
+.save-slot-disabled {
+  pointer-events: none;
+  opacity: 0.28;
+}
+
+.save-slot-number {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #4477cc;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.save-slot-info { display: flex; flex-direction: column; gap: 3px; }
+
+.save-slot-empty-label {
+  font-size: 0.9rem;
+  color: #5570a0;
+  grid-column: 2 / -1;
+}
+
+.save-slot-ship {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #c8d8f8;
+  margin-bottom: 3px;
+}
+
+.save-slot-meta {
+  font-size: 0.8rem;
+  color: #6880a8;
+}
+
+.save-slot-time {
+  font-size: 0.78rem;
+  color: #5570a0;
+  text-align: right;
+  white-space: nowrap;
+}
