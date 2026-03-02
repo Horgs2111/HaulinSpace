@@ -377,6 +377,7 @@ function buyItem(commodityId, price) {
     player.cargoPrices[commodityId] = oldQty === 0
       ? p
       : Math.round((oldAvg * oldQty + p) / (oldQty + 1))
+    computeShipStats()
     AudioEngine.trade()
     updateHUD()
     renderMarket()
@@ -391,6 +392,7 @@ function sellItem(commodityId, price) {
     if ((player.cargo[commodityId] ?? 0) === 0 && player.cargoPrices) {
       delete player.cargoPrices[commodityId]
     }
+    computeShipStats()
     AudioEngine.trade()
     updateHUD()
     renderMarket()
@@ -405,6 +407,32 @@ function openCargoManifest() {
   showPanel('panel-cargo')
 }
 
+function jettison(id, qty) {
+  const have = player.cargo[id] ?? 0
+  if (have <= 0) return
+  const missionQty = player.missionCargo?.[id] ?? 0
+  const jetQty = Math.min(qty, have - missionQty)  // can't jettison mission cargo
+  if (jetQty <= 0) return
+  player.cargo[id] = have - jetQty
+  if (player.cargo[id] <= 0) {
+    delete player.cargo[id]
+    if (player.cargoPrices?.[id]) delete player.cargoPrices[id]
+  }
+  // Scatter jettisoned goods as loot near the ship (in world space)
+  if (typeof lootItems !== 'undefined') {
+    lootItems.push({
+      x:         player.x + (Math.random() - 0.5) * 80,
+      y:         player.y + (Math.random() - 0.5) * 80,
+      commodity: id,
+      qty:       jetQty
+    })
+  }
+  computeShipStats()
+  updateHUD()
+  renderCargoManifest()
+  document.getElementById('cargo-credits').innerText = player.credits.toLocaleString() + ' cr'
+}
+
 function renderCargoManifest() {
   const el = document.getElementById('cargo-manifest-body')
   if (!el) return
@@ -415,9 +443,16 @@ function renderCargoManifest() {
     return
   }
 
-  let html = '<div class="cargo-table">' +
+  // Mass summary
+  const ms = player._mass
+  let massLine = ''
+  if (ms) {
+    massLine = `<div class="cargo-mass-info">Ship mass: <strong>${ms.hull_mass_t} T hull</strong> + <strong>${ms.cargo_mass_t.toFixed(1)} T cargo</strong> = <strong>${ms.totalMass_t.toFixed(1)} T total</strong> — performance at <strong>${Math.round(ms.mass_ratio * 100)}%</strong></div>`
+  }
+
+  let html = massLine + '<div class="cargo-table">' +
     '<div class="cargo-header">' +
-      '<div>Commodity</div><div>Qty</div><div>Avg Paid</div><div>Total Paid</div><div>Est. Sell</div>' +
+      '<div>Commodity</div><div>Qty</div><div>Avg Paid</div><div>Total Paid</div><div>Est. Sell</div><div></div>' +
     '</div>'
 
   let grandPaid = 0
@@ -427,14 +462,15 @@ function renderCargoManifest() {
     const qty = player.cargo[id]
     const com = GAME_COMMODITIES.find(c => c.id === id)
     if (!com) continue
-    const avgPaid  = player.cargoPrices?.[id] ?? com.base_price
-    const totalP   = avgPaid * qty
-    const sellEst  = Math.round(com.base_price * 0.88)
-    const totalSE  = sellEst * qty
-    grandPaid     += totalP
-    grandSell     += totalSE
+    const avgPaid    = player.cargoPrices?.[id] ?? com.base_price
+    const totalP     = avgPaid * qty
+    const sellEst    = Math.round(com.base_price * 0.88)
+    const totalSE    = sellEst * qty
+    grandPaid       += totalP
+    grandSell       += totalSE
 
-    const missionQty = player.missionCargo?.[id] ?? 0
+    const missionQty  = player.missionCargo?.[id] ?? 0
+    const canJettison = qty - missionQty > 0
     html += `<div class="cargo-row">` +
       `<div class="cargo-name">${com.label}` +
         (com.illegal ? ' <span class="illegal-badge">ILLEGAL</span>' : '') +
@@ -444,6 +480,7 @@ function renderCargoManifest() {
       `<div class="cargo-num">${avgPaid.toLocaleString()} cr</div>` +
       `<div class="cargo-num">${totalP.toLocaleString()} cr</div>` +
       `<div class="cargo-num cargo-sellest">${totalSE.toLocaleString()} cr</div>` +
+      `<div class="cargo-jettison">${canJettison ? `<button class="btn-jettison" onclick="jettison('${id}',${qty - missionQty})">Jettison</button>` : ''}</div>` +
     `</div>`
   }
 
@@ -563,6 +600,7 @@ function bmBuyItem(commodityId, price) {
   player.cargo[commodityId] = (player.cargo[commodityId] || 0) + 1
   if (typeof playerStats !== 'undefined') { playerStats.creditsSpent += price; playerStats.cargoTraded++ }
   adjustRep('Federation Navy', -3)
+  computeShipStats()
   AudioEngine.trade()
   updateHUD()
   renderBlackMarket()
@@ -575,6 +613,7 @@ function bmSellItem(commodityId, price) {
   if (player.cargo[commodityId] === 0) delete player.cargo[commodityId]
   if (typeof playerStats !== 'undefined') { playerStats.creditsEarned += price; playerStats.cargoTraded++ }
   adjustRep('Federation Navy', -3)
+  computeShipStats()
   AudioEngine.trade()
   updateHUD()
   renderBlackMarket()
@@ -587,6 +626,7 @@ function bmFenceItem(commodityId, price) {
   if (player.cargo[commodityId] === 0) delete player.cargo[commodityId]
   if (typeof playerStats !== 'undefined') { playerStats.creditsEarned += price; playerStats.cargoTraded++ }
   adjustRep('Federation Navy', -2)
+  computeShipStats()
   AudioEngine.trade()
   updateHUD()
   renderBlackMarket()
@@ -746,6 +786,8 @@ function buyShip(shipIdx) {
   player.hp       = ship.hull
   player.fuel     = ship.fuel_capacity
   player.upgrades = []
+  player.angularVelocity = 0
+  computeShipStats()
 
   updateHUD()
   renderShipyard()
@@ -1095,6 +1137,7 @@ function acceptMission(idx) {
     player.cargo[m.commodityId] = (player.cargo[m.commodityId] ?? 0) + m.cargoQty
     if (!player.missionCargo) player.missionCargo = {}
     player.missionCargo[m.commodityId] = (player.missionCargo[m.commodityId] ?? 0) + m.cargoQty
+    computeShipStats()
     updateHUD()
   }
 
@@ -1130,6 +1173,10 @@ function renderPlayerInfo() {
   const slotsTotal = s.upgrade_slots + slotsUsed  // current slots + used = original total
 
   // ── Ship stats ──
+  const ms       = player._mass
+  const massLine = ms
+    ? `${ms.hull_mass_t} T hull + ${ms.cargo_mass_t.toFixed(1)} T cargo = ${ms.totalMass_t.toFixed(1)} T (${Math.round(ms.mass_ratio * 100)}% thrust)`
+    : '—'
   const statRows = [
     ['Hull',          `${player.hp} / ${s.hull}`],
     ['Speed',         s.speed],
@@ -1139,6 +1186,7 @@ function renderPlayerInfo() {
     ['Upgrade Slots', `${player.ship.upgrade_slots} remaining (${slotsUsed} used)`],
     ['Fuel',          `${player.fuel ?? s.fuel_capacity} / ${s.fuel_capacity}`],
     ['Cargo',         `${cargoUsed} used  ·  ${cargoFree} free  ·  ${s.cargo} total`],
+    ['Mass',          massLine],
   ]
 
   const diffLabel = player.difficulty

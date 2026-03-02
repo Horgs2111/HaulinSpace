@@ -1,33 +1,33 @@
 const GAME_SHIPS = [
-  { name:'Rustrunner Shuttle',   tier:1, cargo:20,  hull:60,  speed:5,  turn_rate:8,  inertia:2,  weapon_slots:1, upgrade_slots:1, price:1000,   fuel_capacity:6  },
-  { name:'Cinder Scout',         tier:1, cargo:25,  hull:55,  speed:6,  turn_rate:9,  inertia:2,  weapon_slots:1, upgrade_slots:2, price:3000,   fuel_capacity:6  },
-  { name:'Mercury Courier',      tier:2, cargo:35,  hull:70,  speed:7,  turn_rate:8,  inertia:3,  weapon_slots:1, upgrade_slots:2, price:7000,   fuel_capacity:8  },
-  { name:'Atlas Freighter',      tier:2, cargo:60,  hull:90,  speed:4,  turn_rate:5,  inertia:5,  weapon_slots:2, upgrade_slots:2, price:12000,  fuel_capacity:8  },
-  { name:'Drake Raider',         tier:2, cargo:30,  hull:85,  speed:7,  turn_rate:7,  inertia:3,  weapon_slots:2, upgrade_slots:2, price:14000,  fuel_capacity:8  },
-  { name:'Nova Trader',          tier:3, cargo:80,  hull:110, speed:4,  turn_rate:5,  inertia:6,  weapon_slots:2, upgrade_slots:3, price:25000,  fuel_capacity:10 },
-  { name:'Falcon Interceptor',   tier:3, cargo:35,  hull:95,  speed:9,  turn_rate:10, inertia:3,  weapon_slots:3, upgrade_slots:2, price:30000,  fuel_capacity:10 },
-  { name:'Orion Gunship',        tier:3, cargo:45,  hull:130, speed:6,  turn_rate:6,  inertia:4,  weapon_slots:3, upgrade_slots:3, price:42000,  fuel_capacity:10 },
-  { name:'Titan Hauler',         tier:4, cargo:120, hull:160, speed:3,  turn_rate:4,  inertia:8,  weapon_slots:2, upgrade_slots:4, price:65000,  fuel_capacity:12 },
-  { name:'Viper Strikecraft',    tier:4, cargo:40,  hull:140, speed:10, turn_rate:10, inertia:3,  weapon_slots:4, upgrade_slots:3, price:70000,  fuel_capacity:12 },
-  { name:'Sentinel Frigate',     tier:4, cargo:90,  hull:180, speed:5,  turn_rate:5,  inertia:6,  weapon_slots:4, upgrade_slots:4, price:90000,  fuel_capacity:12 },
-  { name:'Leviathan Freighter',  tier:5, cargo:200, hull:220, speed:2,  turn_rate:3,  inertia:10, weapon_slots:3, upgrade_slots:5, price:150000, fuel_capacity:14 },
-  { name:'Phantom Stealth',      tier:5, cargo:50,  hull:170, speed:9,  turn_rate:9,  inertia:4,  weapon_slots:4, upgrade_slots:4, price:180000, fuel_capacity:14 },
-  { name:'Aegis Destroyer',      tier:5, cargo:100, hull:260, speed:6,  turn_rate:5,  inertia:7,  weapon_slots:5, upgrade_slots:5, price:220000, fuel_capacity:14 },
-  { name:'Celestial Dreadnought',tier:6, cargo:150, hull:350, speed:4,  turn_rate:4,  inertia:9,  weapon_slots:6, upgrade_slots:6, price:350000, fuel_capacity:16 },
-  { name:'Matts Ship',           tier:7, cargo:500, hull:9999,speed:15, turn_rate:10, inertia:9,  weapon_slots:50,upgrade_slots:50,price:500000, fuel_capacity:16 }
+  { name:'Rustrunner Shuttle',   tier:1, cargo:20,  hull:60,  speed:5,  turn_rate:8,  inertia:2,  weapon_slots:1, upgrade_slots:1, price:1000,   fuel_capacity:6,  hull_mass_t:80   },
+  { name:'Cinder Scout',         tier:1, cargo:25,  hull:55,  speed:6,  turn_rate:9,  inertia:2,  weapon_slots:1, upgrade_slots:2, price:3000,   fuel_capacity:6,  hull_mass_t:75   },
+  { name:'Mercury Courier',      tier:2, cargo:35,  hull:70,  speed:7,  turn_rate:8,  inertia:3,  weapon_slots:1, upgrade_slots:2, price:7000,   fuel_capacity:8,  hull_mass_t:140  },
+  { name:'Atlas Freighter',      tier:2, cargo:60,  hull:90,  speed:4,  turn_rate:5,  inertia:5,  weapon_slots:2, upgrade_slots:2, price:12000,  fuel_capacity:8,  hull_mass_t:220  },
+  { name:'Drake Raider',         tier:2, cargo:30,  hull:85,  speed:7,  turn_rate:7,  inertia:3,  weapon_slots:2, upgrade_slots:2, price:14000,  fuel_capacity:8,  hull_mass_t:130  },
+  { name:'Nova Trader',          tier:3, cargo:80,  hull:110, speed:4,  turn_rate:5,  inertia:6,  weapon_slots:2, upgrade_slots:3, price:25000,  fuel_capacity:10, hull_mass_t:310  },
+  { name:'Falcon Interceptor',   tier:3, cargo:35,  hull:95,  speed:9,  turn_rate:10, inertia:3,  weapon_slots:3, upgrade_slots:2, price:30000,  fuel_capacity:10, hull_mass_t:200  },
+  { name:'Orion Gunship',        tier:3, cargo:45,  hull:130, speed:6,  turn_rate:6,  inertia:4,  weapon_slots:3, upgrade_slots:3, price:42000,  fuel_capacity:10, hull_mass_t:360  },
+  { name:'Titan Hauler',         tier:4, cargo:120, hull:160, speed:3,  turn_rate:4,  inertia:8,  weapon_slots:2, upgrade_slots:4, price:65000,  fuel_capacity:12, hull_mass_t:520  },
+  { name:'Viper Strikecraft',    tier:4, cargo:40,  hull:140, speed:10, turn_rate:10, inertia:3,  weapon_slots:4, upgrade_slots:3, price:70000,  fuel_capacity:12, hull_mass_t:260  },
+  { name:'Sentinel Frigate',     tier:4, cargo:90,  hull:180, speed:5,  turn_rate:5,  inertia:6,  weapon_slots:4, upgrade_slots:4, price:90000,  fuel_capacity:12, hull_mass_t:480  },
+  { name:'Leviathan Freighter',  tier:5, cargo:200, hull:220, speed:2,  turn_rate:3,  inertia:10, weapon_slots:3, upgrade_slots:5, price:150000, fuel_capacity:14, hull_mass_t:950  },
+  { name:'Phantom Stealth',      tier:5, cargo:50,  hull:170, speed:9,  turn_rate:9,  inertia:4,  weapon_slots:4, upgrade_slots:4, price:180000, fuel_capacity:14, hull_mass_t:280  },
+  { name:'Aegis Destroyer',      tier:5, cargo:100, hull:260, speed:6,  turn_rate:5,  inertia:7,  weapon_slots:5, upgrade_slots:5, price:220000, fuel_capacity:14, hull_mass_t:740  },
+  { name:'Celestial Dreadnought',tier:6, cargo:150, hull:350, speed:4,  turn_rate:4,  inertia:9,  weapon_slots:6, upgrade_slots:6, price:350000, fuel_capacity:16, hull_mass_t:1900 },
+  { name:'Matts Ship',           tier:7, cargo:500, hull:9999,speed:15, turn_rate:10, inertia:9,  weapon_slots:50,upgrade_slots:50,price:500000, fuel_capacity:16, hull_mass_t:50   }
 ]
 
 const GAME_COMMODITIES = [
-  { id:'food',        label:'Food',        base_price:10,  volatility:0.20 },
-  { id:'water',       label:'Water',       base_price:8,   volatility:0.15 },
-  { id:'ore',         label:'Ore',         base_price:20,  volatility:0.30 },
-  { id:'fuel',        label:'Fuel',        base_price:35,  volatility:0.25 },
-  { id:'electronics', label:'Electronics', base_price:80,  volatility:0.40 },
-  { id:'medicine',    label:'Medicine',    base_price:120, volatility:0.35 },
-  { id:'machinery',   label:'Machinery',   base_price:70,  volatility:0.30 },
-  { id:'luxuries',    label:'Luxuries',    base_price:250, volatility:0.50 },
-  { id:'contraband',  label:'Contraband',  base_price:380, volatility:0.65, illegal:true },
-  { id:'weapons',     label:'Weapons',     base_price:220, volatility:0.50, illegal:true }
+  { id:'food',        label:'Food',        base_price:10,  volatility:0.20, mass_t:0.8 },
+  { id:'water',       label:'Water',       base_price:8,   volatility:0.15, mass_t:1.2 },
+  { id:'ore',         label:'Ore',         base_price:20,  volatility:0.30, mass_t:2.0 },
+  { id:'fuel',        label:'Fuel',        base_price:35,  volatility:0.25, mass_t:1.2 },
+  { id:'electronics', label:'Electronics', base_price:80,  volatility:0.40, mass_t:0.3 },
+  { id:'medicine',    label:'Medicine',    base_price:120, volatility:0.35, mass_t:0.3 },
+  { id:'machinery',   label:'Machinery',   base_price:70,  volatility:0.30, mass_t:1.5 },
+  { id:'luxuries',    label:'Luxuries',    base_price:250, volatility:0.50, mass_t:0.2 },
+  { id:'contraband',  label:'Contraband',  base_price:380, volatility:0.65, mass_t:0.4, illegal:true },
+  { id:'weapons',     label:'Weapons',     base_price:220, volatility:0.50, mass_t:0.8, illegal:true }
 ]
 
 const GAME_FACTIONS = [

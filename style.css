@@ -1334,7 +1334,7 @@ canvas {
 .cargo-header,
 .cargo-row {
   display: grid;
-  grid-template-columns: 1fr 60px 110px 120px 120px;
+  grid-template-columns: 1fr 60px 110px 120px 120px 90px;
   align-items: center;
   padding: 8px 12px;
   font-size: 13px;
@@ -1409,6 +1409,41 @@ canvas {
 
 .cargo-totals strong {
   color: #aabbcc;
+}
+
+.cargo-jettison {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-jettison {
+  background: transparent;
+  border: 1px solid rgba(200,80,60,0.40);
+  color: #cc5544;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-jettison:hover {
+  background: rgba(200,60,40,0.18);
+  color: #ff7766;
+  border-color: rgba(220,80,60,0.65);
+}
+
+.cargo-mass-info {
+  font-size: 12px;
+  color: #5577aa;
+  padding: 8px 12px 14px;
+  border-bottom: 1px solid rgba(60,100,180,0.15);
+  margin-bottom: 4px;
+}
+
+.cargo-mass-info strong {
+  color: #7799cc;
 }
 
 /* ─── Mission complete popup ────────────────────────────────────────────── */

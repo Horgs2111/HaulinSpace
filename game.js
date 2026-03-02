@@ -470,6 +470,35 @@ function drawTitleBackground() {
 
 // ─── Ship physics ─────────────────────────────────────────────────────────────
 
+// Recompute mass-derived stats and cache on player._mass.
+// Call whenever cargo, ship, or upgrades change.
+function computeShipStats() {
+  const hull_mass_t = player.ship.hull_mass_t ?? 200
+  let   cargo_mass_t = 0
+  for (const [id, qty] of Object.entries(player.cargo ?? {})) {
+    const com = GAME_COMMODITIES.find(c => c.id === id)
+    cargo_mass_t += (com?.mass_t ?? 1.0) * qty
+  }
+  const totalMass_t = hull_mass_t + cargo_mass_t
+  const mass_ratio  = hull_mass_t / totalMass_t  // 1.0 empty, < 1.0 loaded
+  player._mass = { hull_mass_t, cargo_mass_t, totalMass_t, mass_ratio }
+}
+
+// Gravity parameters by planet type
+function getPlanetGravity(planet) {
+  const G_CONFIGS = {
+    trade_hub:    { g: 6.0, radius: 400 },
+    military:     { g: 5.0, radius: 360 },
+    industrial:   { g: 4.0, radius: 340 },
+    mining:       { g: 3.5, radius: 300 },
+    agricultural: { g: 3.0, radius: 280 },
+    frontier:     { g: 1.5, radius: 200 }
+  }
+  return G_CONFIGS[planet.type] ?? { g: 3.0, radius: 280 }
+}
+
+const G_SCALE = 0.15  // global gravity strength scale
+
 function updatePhysics(dt) {
   if (dt === 0 || activePanel || player.landedPlanet || galaxyMapOpen || paused) return
 
@@ -482,13 +511,26 @@ function updatePhysics(dt) {
   }
   const boosting = boostTimer > 0
 
-  const TURN  = player.ship.turn_rate * 25 * Math.PI / 180
-  const ACCEL = player.ship.speed     * 20 * (boosting ? BOOST_ACCEL : 1)
-  const VMAX  = player.ship.speed     * 30 * (boosting ? BOOST_VMAX  : 1)
-  const DAMP  = Math.exp(-dt / (player.ship.inertia / 3))
+  // Mass ratio: 1.0 when empty, lower when heavy cargo reduces performance
+  const mass_ratio = player._mass?.mass_ratio ?? 1.0
 
-  if (isKeyHeld(keybinds.turnLeft))  player.angle -= TURN * dt
-  if (isKeyHeld(keybinds.turnRight)) player.angle += TURN * dt
+  const TURN_BASE  = player.ship.turn_rate * 25 * Math.PI / 180
+  const ACCEL_BASE = player.ship.speed     * 20 * (boosting ? BOOST_ACCEL : 1)
+  const VMAX_BASE  = player.ship.speed     * 30 * (boosting ? BOOST_VMAX  : 1)
+  const DAMP       = Math.exp(-dt / (player.ship.inertia / 3))
+
+  // Cargo scales performance: full hold reduces accel and top speed noticeably
+  const TURN  = TURN_BASE  * Math.pow(mass_ratio, 0.6)  // rotation degrades less than linear
+  const ACCEL = ACCEL_BASE * mass_ratio
+  const VMAX  = VMAX_BASE  * Math.pow(mass_ratio, 0.4)
+
+  // Angular momentum — rotation has inertia, not instant
+  const angAccel = TURN * 5  // steady-state angular rate = TURN rad/s
+  if (isKeyHeld(keybinds.turnLeft))  player.angularVelocity -= angAccel * dt
+  if (isKeyHeld(keybinds.turnRight)) player.angularVelocity += angAccel * dt
+  player.angularVelocity *= Math.exp(-5 * dt)  // 0.2 s time constant
+  player.angle += player.angularVelocity * dt
+
   if (isKeyHeld(keybinds.thrust)) {
     player.vx += Math.cos(player.angle) * ACCEL * dt
     player.vy += Math.sin(player.angle) * ACCEL * dt
@@ -512,6 +554,7 @@ function updatePhysics(dt) {
     if (dist < LAND_RADIUS) {
       const ap = autopilot; autopilot = null
       player.vx = 0; player.vy = 0
+      player.angularVelocity = 0
       player.landedPlanet = ap
       openLanding(ap)
     } else {
@@ -520,13 +563,36 @@ function updatePhysics(dt) {
       while (diff >  Math.PI) diff -= Math.PI * 2
       while (diff < -Math.PI) diff += Math.PI * 2
       if (Math.abs(diff) > 0.08) {
-        player.angle += Math.sign(diff) * Math.min(TURN * dt, Math.abs(diff))
+        player.angularVelocity += Math.sign(diff) * angAccel * dt * 0.7
       } else {
         player.vx += Math.cos(player.angle) * ACCEL * dt
         player.vy += Math.sin(player.angle) * ACCEL * dt
       }
     }
   }
+
+  // Gravity wells — star at (0,0) and each planet
+  let gravX = 0, gravY = 0
+  const starDist = Math.hypot(player.x, player.y)
+  if (starDist > 30) {
+    const grav = 15 * (350 / starDist) * (350 / starDist) * G_SCALE
+    gravX -= (player.x / starDist) * grav
+    gravY -= (player.y / starDist) * grav
+  }
+  for (const p of (systemLayout?.planets ?? [])) {
+    const pdx  = player.x - p.sx
+    const pdy  = player.y - p.sy
+    const pdist = Math.hypot(pdx, pdy)
+    if (pdist > LAND_RADIUS && pdist < 800) {
+      const { g: pg, radius: pr } = getPlanetGravity(p)
+      const grav = pg * (pr / pdist) * (pr / pdist) * G_SCALE
+      gravX -= (pdx / pdist) * grav
+      gravY -= (pdy / pdist) * grav
+    }
+  }
+  player.vx += gravX * dt
+  player.vy += gravY * dt
+  player._gravMag = Math.hypot(gravX, gravY)
 
   const spd = Math.hypot(player.vx, player.vy)
   if (spd > VMAX) { player.vx = (player.vx / spd) * VMAX; player.vy = (player.vy / spd) * VMAX }
@@ -650,6 +716,13 @@ function drawSystemHUD() {
   ctx.font = '11px Arial'; ctx.fillStyle = 'rgba(65,105,165,0.75)'; ctx.textAlign = 'left'
   ctx.fillText(`SPD  ${Math.round(speed).toString().padStart(3)}`,  18, canvas.height - 28)
   ctx.fillText(`HDG  ${Math.round(hdg).toString().padStart(3)}°`,   18, canvas.height - 14)
+  // Gravity indicator — show when gravity is meaningful
+  const gravMag = player._gravMag ?? 0
+  if (gravMag > 0.5) {
+    const gAlpha = Math.min(0.75, 0.2 + gravMag * 0.04)
+    ctx.fillStyle = `rgba(100,155,220,${gAlpha})`
+    ctx.fillText(`GRAV ${Math.round(gravMag).toString().padStart(3)}`, 18, canvas.height - 42)
+  }
   ctx.restore()
 
   // Boost indicator
@@ -1582,6 +1655,7 @@ function checkLootCollection() {
       const take = Math.min(l.qty, player.ship.cargo - used)
       if (take > 0) {
         player.cargo[l.commodity] = (player.cargo[l.commodity] || 0) + take
+        computeShipStats()
         updateHUD()
       }
       lootItems.splice(i, 1)
@@ -2260,10 +2334,12 @@ function initGame(difficulty = 'normal') {
     x:            startX,
     y:            startY,
     angle:        Math.PI,
-    vx:           0,
-    vy:           0,
-    landedPlanet: null
+    vx:              0,
+    vy:              0,
+    angularVelocity: 0,
+    landedPlanet:    null
   }
+  computeShipStats()
 
   nearPlanet    = null
   lastFrameTime = 0
@@ -2290,6 +2366,7 @@ function removeMissionCargo(m) {
     player.cargo[m.commodityId] = Math.max(0, player.cargo[m.commodityId] - m.cargoQty)
     if (player.cargo[m.commodityId] === 0) delete player.cargo[m.commodityId]
   }
+  computeShipStats()
   if (player.missionCargo?.[m.commodityId]) {
     player.missionCargo[m.commodityId] = Math.max(0, player.missionCargo[m.commodityId] - m.cargoQty)
     if (player.missionCargo[m.commodityId] === 0) delete player.missionCargo[m.commodityId]
@@ -2461,9 +2538,10 @@ function saveGame(slot = currentSlot) {
         x:            player.x,
         y:            player.y,
         angle:        player.angle,
-        vx:           0,
-        vy:           0,
-        landedPlanet: null
+        vx:              0,
+        vy:              0,
+        angularVelocity: 0,
+        landedPlanet:    null
       },
       galaxy,
       systemStates:  [...systemStates.entries()],
@@ -2552,13 +2630,15 @@ function loadGame(slot) {
 
     player        = { ...data.player, landedPlanet: null }
     // Back-compat: saves before fuel system won't have fuel field
-    if (player.fuel == null)         player.fuel         = player.ship.fuel_capacity ?? 6
-    if (!player.cargoPrices)         player.cargoPrices  = {}
-    if (!player.missionCargo)        player.missionCargo = {}
-    if (!player.factionRep)          player.factionRep   = Object.fromEntries(GAME_FACTIONS.map(f => [f.name, 0]))
+    if (player.fuel == null)            player.fuel            = player.ship.fuel_capacity ?? 6
+    if (!player.cargoPrices)            player.cargoPrices     = {}
+    if (!player.missionCargo)           player.missionCargo    = {}
+    if (!player.factionRep)             player.factionRep      = Object.fromEntries(GAME_FACTIONS.map(f => [f.name, 0]))
     else GAME_FACTIONS.forEach(f => { if (!(f.name in player.factionRep)) player.factionRep[f.name] = 0 })
-    if (!player.difficulty)          player.difficulty   = 'normal'
-    if (player.missileAmmo == null)  player.missileAmmo  = 0
+    if (!player.difficulty)             player.difficulty      = 'normal'
+    if (player.missileAmmo == null)     player.missileAmmo     = 0
+    if (player.angularVelocity == null) player.angularVelocity = 0
+    computeShipStats()
     playerStats       = data.playerStats ?? { jumpsTotal:0, creditsEarned:0, creditsSpent:0, missionsCompleted:0, enemiesDestroyed:0, cargoTraded:0, planetsVisited:0 }
     planetsVisitedSet = new Set(data.planetsVisitedSet ?? [])
     nearPlanet    = null
