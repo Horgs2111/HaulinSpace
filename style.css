@@ -993,7 +993,7 @@ canvas {
 
 .upgrade-row {
   display: grid;
-  grid-template-columns: 1fr 120px 110px;
+  grid-template-columns: 1fr 110px auto;
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
@@ -1026,6 +1026,14 @@ canvas {
   text-align: right;
 }
 
+.upgrade-btns {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  justify-self: end;
+}
+
 .btn-install {
   padding: 6px 18px;
   border-radius: 4px;
@@ -1036,7 +1044,6 @@ canvas {
   font-size: 12px;
   font-weight: 700;
   transition: background 0.12s;
-  justify-self: end;
 }
 
 .btn-install:hover:not(:disabled) {
@@ -1046,6 +1053,22 @@ canvas {
 .btn-install:disabled {
   opacity: 0.22;
   cursor: not-allowed;
+}
+
+.btn-sell {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 80, 60, 0.40);
+  background: rgba(60, 14, 14, 0.50);
+  color: #cc7755;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.12s;
+}
+
+.btn-sell:hover {
+  background: rgba(90, 22, 16, 0.80);
 }
 
 /* ─── Title / Menu / Options screens ─────────────────────────────────────── */
@@ -2040,7 +2063,7 @@ canvas {
 
 .save-slot-card {
   display: grid;
-  grid-template-columns: 52px 1fr auto;
+  grid-template-columns: 52px 1fr auto auto;
   align-items: center;
   gap: 14px;
   background: rgba(20, 35, 70, 0.6);
@@ -2102,6 +2125,22 @@ canvas {
   color: #5570a0;
   text-align: right;
   white-space: nowrap;
+}
+
+.btn-delete-save {
+  background: transparent;
+  border: 1px solid rgba(180, 60, 60, 0.35);
+  border-radius: 5px;
+  color: #884444;
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.btn-delete-save:hover {
+  background: rgba(160, 40, 40, 0.35);
+  border-color: #cc4444;
+  color: #ffaaaa;
 }
 
 /* ─── Credits screen ────────────────────────────────────────────────────────── */

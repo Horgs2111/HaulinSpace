@@ -904,16 +904,23 @@ function renderUpgradeShop() {
     }
 
     // Button
-    let btnHtml
+    let innerBtns
     if (alreadyFitted) {
-      btnHtml = `<button class="btn-install btn-fitted" disabled>✓ Fitted</button>`
+      const sellPrice = Math.floor(upgrade.price / 3)
+      innerBtns =
+        `<button class="btn-install btn-fitted" disabled>✓ Fitted</button>` +
+        `<button class="btn-sell" onclick="sellUpgrade(${upgrade.idx})">Sell ${sellPrice.toLocaleString()} cr</button>`
     } else if (!prereqMet) {
-      btnHtml = `<button class="btn-install" disabled title="Requires ${upgrade.requiresUpgrade}">Need launcher</button>`
+      innerBtns = `<button class="btn-install" disabled title="Requires ${upgrade.requiresUpgrade}">Need launcher</button>`
     } else if (upgrade.effect === 'ammo') {
-      btnHtml = `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${upgrade.idx})">Buy ×5</button>`
+      const sellPrice = Math.floor(upgrade.price / 3)
+      innerBtns =
+        `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${upgrade.idx})">Buy ×5</button>` +
+        (fittedCount > 0 ? `<button class="btn-sell" onclick="sellUpgrade(${upgrade.idx})">Sell ×5 ${sellPrice.toLocaleString()} cr</button>` : '')
     } else {
-      btnHtml = `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${upgrade.idx})">Install</button>`
+      innerBtns = `<button class="btn-install" ${canInstall ? '' : 'disabled'} onclick="installUpgrade(${upgrade.idx})">Install</button>`
     }
+    const btnHtml = `<div class="upgrade-btns">${innerBtns}</div>`
 
     const row = document.createElement('div')
     row.className = 'upgrade-row' + (alreadyFitted ? ' upgrade-fitted' : '')
@@ -1016,6 +1023,99 @@ function installUpgrade(upgradeIdx) {
     // jump_cost, scanner_radius, auto_refuel, ramscoop, afterburner: looked up by name in game.js
   }
 
+  updateHUD()
+  if (typeof updateMissileHUD === 'function') updateMissileHUD()
+  if (typeof updateSidePanel  === 'function') updateSidePanel()
+  renderUpgradeShop()
+}
+
+function sellUpgrade(upgradeIdx) {
+  const upgrade = GAME_UPGRADES[upgradeIdx]
+  if (!upgrade) return
+
+  const sellPrice = Math.floor(upgrade.price / 3)
+
+  // ─── Ammo: sell up to 5 units back ───
+  if (upgrade.effect === 'ammo') {
+    const inv   = player.ammoInventory ?? {}
+    const count = inv[upgrade.ammoType] ?? 0
+    if (count <= 0) return
+    const selling = Math.min(5, count)
+    const refund  = Math.floor(sellPrice * selling / 5)
+    player.ammoInventory[upgrade.ammoType] = count - selling
+    if ((player.ammoInventory[upgrade.ammoType] ?? 0) === 0 &&
+        player.selectedAmmoType === upgrade.ammoType) {
+      player.selectedAmmoType = null
+    }
+    player.credits += refund
+    if (typeof updateMissileHUD === 'function') updateMissileHUD()
+    updateHUD()
+    renderUpgradeShop()
+    return
+  }
+
+  // ─── Fitted upgrade / weapon ───
+  const slots    = player.weaponSlots ?? []
+  const upgrades = player.upgrades    ?? []
+
+  const isFitted = upgrade.usesWeaponSlot
+    ? slots.includes(upgrade.name)
+    : upgrades.includes(upgrade.name)
+  if (!isFitted) return
+
+  // Restore weapon slot
+  if (upgrade.usesWeaponSlot) {
+    const wi = player.weaponSlots.indexOf(upgrade.name)
+    if (wi >= 0) player.weaponSlots[wi] = 'Laser Cannon'
+  }
+
+  // Restore upgrade slot
+  if (upgrade.usesUpgradeSlot) player.ship.upgrade_slots++
+
+  // Remove one entry from upgrades tracking array
+  if (!upgrade.usesWeaponSlot && upgrade.effect !== 'ammo') {
+    const ui = (player.upgrades ?? []).indexOf(upgrade.name)
+    if (ui >= 0) player.upgrades.splice(ui, 1)
+  }
+
+  // Reverse stat effect
+  switch (upgrade.effect) {
+    case 'cargo':
+      player.ship.cargo = Math.max(0, player.ship.cargo - upgrade.delta); break
+    case 'speed':       player.ship.speed     -= upgrade.delta; break
+    case 'turn_rate':   player.ship.turn_rate -= upgrade.delta; break
+    case 'inertia':     player.ship.inertia   -= upgrade.delta; break
+    case 'hull':
+      player.ship.hull -= upgrade.delta
+      player.hp = Math.min(player.hp, player.ship.hull)
+      break
+    case 'shield_regen':
+      player.ship.shield_regen = Math.max(0, (player.ship.shield_regen ?? 0) - upgrade.delta); break
+    case 'armaplast':
+    case 'durasteel':
+      player.armourMax  = Math.max(0, (player.armourMax ?? 0) - upgrade.delta)
+      player.armour     = Math.min(player.armour ?? 0, player.armourMax)
+      player.ship.cargo += upgrade.armourMass ?? 0
+      break
+    case 'cargo_converter':
+      player.ship.cargo         += 10
+      player.ship.upgrade_slots -= 1
+      break
+    // proton_cannon, missile/rocket/special launcher, damage_pct:
+    //   slot restoration already handled above; no additional stat to reverse
+  }
+
+  // Clear pinned ammo if its launcher was just removed
+  if (player.selectedAmmoType && typeof AMMO_LAUNCHER !== 'undefined') {
+    if (AMMO_LAUNCHER[player.selectedAmmoType] === upgrade.name &&
+        !player.weaponSlots.includes(upgrade.name)) {
+      player.selectedAmmoType = null
+    }
+  }
+
+  player.credits += sellPrice
+
+  if (typeof computeShipStats === 'function') computeShipStats()
   updateHUD()
   if (typeof updateMissileHUD === 'function') updateMissileHUD()
   if (typeof updateSidePanel  === 'function') updateSidePanel()
@@ -1563,7 +1663,8 @@ function renderSaveSlotPicker() {
           `<div class="save-slot-ship">${meta.shipName}</div>` +
           `<div class="save-slot-meta">${meta.systemName}  ·  ${meta.credits.toLocaleString()} cr  ·  ${diffLabel}  ·  ${meta.jumps} jumps</div>` +
         `</div>` +
-        `<div class="save-slot-time">${date}<br>${time}</div>`
+        `<div class="save-slot-time">${date}<br>${time}</div>` +
+        `<button class="btn-delete-save" title="Delete save" onclick="event.stopPropagation(); if(confirm('Delete Slot ${slot}?')) { deleteSave(${slot}); renderSaveSlotPicker(); }">✕</button>`
     }
 
     listEl.appendChild(card)

@@ -205,18 +205,20 @@ let nearPlanet    = null
 
 let planetMarkets = new Map()  // planet.id → persistent market object
 let npcTraders    = []
-const TRADER_COUNT = 15
+const TRADER_COUNT = 30
 
-const LAND_RADIUS      = 70    // world units — enter to see landing prompt
-const DEPART_SPEED     = 50    // world units/s — outward nudge on departure
-const JUMP_MIN_DISTANCE = 400  // world units from all planets before jump
+const LAND_RADIUS        = 70    // world units — enter to see landing prompt
+const DEPART_SPEED       = 50    // world units/s — outward nudge on departure
+const JUMP_MIN_DISTANCE  = 400   // world units from all planets before jump
+const TRADER_JUMP_DIST   = JUMP_MIN_DISTANCE * 2  // 800 — traders fly this far before jumping
+const TRADER_SPEED       = 130   // world units/second for departing/arriving traders
 
 function buildSystemLayout(sys) {
   const count = Math.max(sys.planets.length, 1)
   systemLayout = {
     planets: sys.planets.map((planet, i) => {
       const angle  = (sys.id * 2.618 + i * (Math.PI * 2 / count)) % (Math.PI * 2)
-      const radius = 320 + i * 260 + ((sys.id * 37 + i * 23) % 130)
+      const radius = 640 + i * 520 + ((sys.id * 37 + i * 23) % 260)
       return { ...planet, sx: Math.cos(angle) * radius, sy: Math.sin(angle) * radius }
     })
   }
@@ -619,6 +621,101 @@ function updatePhysics(dt) {
   player.y  += player.vy * dt
 }
 
+// ─── Star sprites ─────────────────────────────────────────────────────────────
+
+const STAR_SPRITE_PATHS = {
+  yellow:       'Sprites/stars/star_yellow.png',
+  yellow_white: 'Sprites/stars/star_yellow_white.png',
+  orange:       'Sprites/stars/star_orange.png',
+  red_dwarf:    'Sprites/stars/star_red_dwarf.png',
+  white:        'Sprites/stars/star_white.png',
+  blue:         'Sprites/stars/star_blue.png',
+  red_giant:    'Sprites/stars/star_red_giant.png',
+  blue_giant:   'Sprites/stars/star_blue_giant.png',
+  purple:       'Sprites/stars/star_purple.png',
+  neutron:      'Sprites/stars/star_neutron.png',
+}
+
+// Weighted pool — each system ID hashes into this to get a stable star type
+const STAR_TYPE_POOL = [
+  ...Array(20).fill('yellow'),
+  ...Array(15).fill('yellow_white'),
+  ...Array(15).fill('orange'),
+  ...Array(20).fill('red_dwarf'),
+  ...Array(10).fill('white'),
+  ...Array(8).fill('blue'),
+  ...Array(6).fill('red_giant'),
+  ...Array(4).fill('blue_giant'),
+  ...Array(1).fill('purple'),
+  ...Array(1).fill('neutron'),
+]
+
+const STAR_SPRITES = {}
+
+function loadStarSprites() {
+  for (const [name, path] of Object.entries(STAR_SPRITE_PATHS)) {
+    const img = new Image()
+    img.src   = path
+    STAR_SPRITES[name] = img
+  }
+}
+
+function getSystemStarType(sysId) {
+  const h = ((sysId * 2654435761) >>> 0) % STAR_TYPE_POOL.length
+  return STAR_TYPE_POOL[h]
+}
+
+function getStarSprite(sysId) {
+  const img = STAR_SPRITES[getSystemStarType(sysId)]
+  return (img && img.complete && img.naturalWidth > 0) ? img : null
+}
+
+// ─── Ship sprites ─────────────────────────────────────────────────────────────
+
+const SHIP_SPRITES = {}   // ship name → Image
+
+const SHIP_SPRITE_PATHS = {
+  // Player / purchasable ships
+  'Rustrunner Shuttle':    'Sprites/Ships/Rustrunner_Shuttle.png',
+  'Cinder Scout':          'Sprites/Ships/Cinder_Scout.png',
+  'Mercury Courier':       'Sprites/Ships/Mercury_Courier.png',
+  'Atlas Freighter':       'Sprites/Ships/Atlas_Freighter.png',
+  'Drake Raider':          'Sprites/Ships/Drake_Raider.png',
+  'Nova Trader':           'Sprites/Ships/Nova_Trader.png',
+  'Falcon Interceptor':    'Sprites/Ships/Falcon_Interceptor.png',
+  'Orion Gunship':         'Sprites/Ships/Orion_Gunship.png',
+  'Titan Hauler':          'Sprites/Ships/Titan_Hauler.png',
+  'Viper Strikecraft':     'Sprites/Ships/Viper_Strikecraft.png',
+  'Sentinel Frigate':      'Sprites/Ships/Sentinel_Frigate.png',
+  'Leviathan Freighter':   'Sprites/Ships/Leviathan_Freighter.png',
+  'Phantom Stealth':       'Sprites/Ships/Phantom_Stealth.png',
+  'Aegis Destroyer':       'Sprites/Ships/Aegis_Destroyer.png',
+  'Celestial Dreadnought': 'Sprites/Ships/Celestial_Dreadnought.png',
+  'Matts Ship':            'Sprites/Ships/Matts_Ship.png',
+  // NPC ships
+  'npc_pirate_light':      'Sprites/Ships/npc_pirate_light.png',
+  'npc_pirate_heavy':      'Sprites/Ships/npc_pirate_heavy.png',
+  'npc_trader':            'Sprites/Ships/npc_trader.png',
+}
+
+function loadShipSprites() {
+  for (const [name, path] of Object.entries(SHIP_SPRITE_PATHS)) {
+    const img = new Image()
+    img.src   = path
+    SHIP_SPRITES[name] = img
+  }
+}
+
+function getShipSprite(name) {
+  const img = SHIP_SPRITES[name]
+  return (img && img.complete && img.naturalWidth > 0) ? img : null
+}
+
+function spriteSize(hull) {
+  return Math.round(Math.max(56, Math.min(192, 80 * Math.sqrt(hull / 100))))
+}
+
+
 // ─── System view draw ─────────────────────────────────────────────────────────
 
 function drawSystemView() {
@@ -633,26 +730,31 @@ function drawSystemView() {
 
   // Sun
   ctx.save()
-  ctx.shadowColor = '#ffdd66'; ctx.shadowBlur = 50
-  ctx.fillStyle   = '#fff3bb'
-  ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI * 2); ctx.fill()
+  const _starSprite = getStarSprite(galaxy.systems[player.system].id)
+  if (_starSprite) {
+    ctx.drawImage(_starSprite, -160, -160, 320, 320)
+  } else {
+    ctx.shadowColor = '#ffdd66'; ctx.shadowBlur = 50
+    ctx.fillStyle   = '#fff3bb'
+    ctx.beginPath(); ctx.arc(0, 0, 120, 0, Math.PI * 2); ctx.fill()
+  }
   ctx.restore()
 
   // Planets
   const atmoTime = Date.now() / 10000
   for (const p of (systemLayout?.planets ?? [])) {
     const isNear = (p === nearPlanet)
-    const radius = isNear ? 15 : 12
+    const radius = isNear ? 45 : 36
 
     // Atmosphere glow (outer halo, slowly rotating gradient)
     ctx.save()
     ctx.translate(p.sx, p.sy)
     ctx.rotate(atmoTime * Math.PI * 2)
-    const atmoGrad = ctx.createRadialGradient(0, 0, radius, 0, 0, radius + 14)
+    const atmoGrad = ctx.createRadialGradient(0, 0, radius, 0, 0, radius + 42)
     atmoGrad.addColorStop(0, isNear ? 'rgba(100,200,255,0.22)' : 'rgba(60,120,210,0.14)')
     atmoGrad.addColorStop(1, 'rgba(0,0,0,0)')
     ctx.fillStyle = atmoGrad
-    ctx.beginPath(); ctx.arc(0, 0, radius + 14, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(0, 0, radius + 42, 0, Math.PI * 2); ctx.fill()
     ctx.restore()
 
     // Planet body
@@ -668,7 +770,7 @@ function drawSystemView() {
       ctx.save()
       ctx.globalAlpha = Math.min(1, (700 - dist) / 300)
       ctx.font = '11px Arial'; ctx.fillStyle = '#7799bb'; ctx.textAlign = 'center'
-      ctx.fillText(p.name, p.sx, p.sy - 22)
+      ctx.fillText(p.name, p.sx, p.sy - 58)
       ctx.restore()
     }
   }
@@ -695,19 +797,6 @@ function drawShip(wx, wy, angle) {
   ctx.rotate(angle)
 
   if (thrusting || boosting) {
-    ctx.save()
-    if (boosting) {
-      ctx.shadowColor = 'rgba(255,140,30,0.95)'; ctx.shadowBlur = 34
-      ctx.fillStyle   = 'rgba(255,180,60,0.90)'
-    } else {
-      ctx.shadowColor = 'rgba(80,160,255,0.9)'; ctx.shadowBlur = 22
-      ctx.fillStyle   = 'rgba(100,185,255,0.75)'
-    }
-    const flameLen = boosting ? 26 : 18
-    ctx.beginPath()
-    ctx.moveTo(-7, 0); ctx.lineTo(-flameLen, -6); ctx.lineTo(-flameLen, 6)
-    ctx.closePath(); ctx.fill()
-    ctx.restore()
     // Emit thrust particles from engine nozzle
     const nozzleX = wx + Math.cos(angle + Math.PI) * 8
     const nozzleY = wy + Math.sin(angle + Math.PI) * 8
@@ -717,11 +806,17 @@ function drawShip(wx, wy, angle) {
     }
   }
 
-  ctx.shadowColor = 'rgba(150,200,255,0.45)'; ctx.shadowBlur = 8
-  ctx.fillStyle   = '#aabfd4'; ctx.strokeStyle = '#ddeeff'; ctx.lineWidth = 1.2
-  ctx.beginPath()
-  ctx.moveTo(14, 0); ctx.lineTo(-8, -9); ctx.lineTo(-4, 0); ctx.lineTo(-8, 9)
-  ctx.closePath(); ctx.fill(); ctx.stroke()
+  const sprite = getShipSprite(player.ship.name)
+  if (sprite) {
+    const sz = spriteSize(player.ship.hull)
+    ctx.drawImage(sprite, -sz / 2, -sz / 2, sz, sz)
+  } else {
+    ctx.shadowColor = 'rgba(150,200,255,0.45)'; ctx.shadowBlur = 8
+    ctx.fillStyle   = '#aabfd4'; ctx.strokeStyle = '#ddeeff'; ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo(14, 0); ctx.lineTo(-8, -9); ctx.lineTo(-4, 0); ctx.lineTo(-8, 9)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+  }
   ctx.restore()
 }
 
@@ -798,16 +893,21 @@ function drawMinimap() {
     }
   }
 
-  // NPC traders docked in current system
+  // NPC traders in current system
   for (const t of npcTraders) {
-    if (t.system !== player.system || t.state !== 'docked') continue
-    const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
-    if (!lp) continue
-    const r  = 38 + (t.id % 5) * 8
-    const tx = lp.sx + Math.cos(t.orbitAngle) * r
-    const ty = lp.sy + Math.sin(t.orbitAngle) * r
-    const rx = (tx - player.x) * scale
-    const ry = (ty - player.y) * scale
+    if (t.system !== player.system) continue
+    let wx, wy
+    if (t.state === 'docked') {
+      const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
+      if (!lp) continue
+      const r = 38 + (t.id % 5) * 8
+      wx = lp.sx + Math.cos(t.orbitAngle) * r
+      wy = lp.sy + Math.sin(t.orbitAngle) * r
+    } else if (t.state === 'departing' || t.state === 'arriving') {
+      wx = t.x; wy = t.y
+    } else { continue }
+    const rx = (wx - player.x) * scale
+    const ry = (wy - player.y) * scale
     mc.beginPath(); mc.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
     mc.fillStyle = '#3ec8b8'; mc.fill()
   }
@@ -954,14 +1054,22 @@ function drawWarpLines(j) {
     ctx.restore()
   }
 
-  // Ship silhouette at canvas centre during warp
+  // Ship at canvas centre during warp
   ctx.save()
-  ctx.translate(cx, cy); ctx.rotate(j.angle)
-  ctx.shadowColor = `rgba(100,180,255,${0.3 + spd * 0.7})`; ctx.shadowBlur = 10 + spd * 20
-  ctx.fillStyle = '#aabfd4'; ctx.strokeStyle = '#ddeeff'; ctx.lineWidth = 1.2
-  ctx.beginPath()
-  ctx.moveTo(14, 0); ctx.lineTo(-8, -9); ctx.lineTo(-4, 0); ctx.lineTo(-8, 9)
-  ctx.closePath(); ctx.fill(); ctx.stroke()
+  ctx.translate(cx, cy)
+  ctx.rotate(j.angle)
+  ctx.shadowColor = `rgba(100,180,255,${0.3 + spd * 0.7})`
+  ctx.shadowBlur  = 10 + spd * 20
+  const _warpSprite = getShipSprite(player.ship.name)
+  if (_warpSprite) {
+    const sz = spriteSize(player.ship.hull)
+    ctx.drawImage(_warpSprite, -sz / 2, -sz / 2, sz, sz)
+  } else {
+    ctx.fillStyle = '#aabfd4'; ctx.strokeStyle = '#ddeeff'; ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo(14, 0); ctx.lineTo(-8, -9); ctx.lineTo(-4, 0); ctx.lineTo(-8, 9)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+  }
   ctx.restore()
 }
 
@@ -1835,11 +1943,18 @@ function drawEnemies() {
     ctx.save()
     ctx.translate(e.x, e.y)
     ctx.rotate(e.angle)
-    ctx.shadowColor = 'rgba(255,80,60,0.55)'; ctx.shadowBlur = 12
-    ctx.fillStyle   = '#b85050'; ctx.strokeStyle = '#ff8870'; ctx.lineWidth = 1.2
-    ctx.beginPath()
-    ctx.moveTo(13, 0); ctx.lineTo(-7, -8); ctx.lineTo(-3, 0); ctx.lineTo(-7, 8)
-    ctx.closePath(); ctx.fill(); ctx.stroke()
+    const spriteName = (e.ship.tier ?? 1) <= 2 ? 'npc_pirate_light' : 'npc_pirate_heavy'
+    const sprite = getShipSprite(spriteName)
+    if (sprite) {
+      const sz = spriteSize(e.ship.hull)
+      ctx.drawImage(sprite, -sz / 2, -sz / 2, sz, sz)
+    } else {
+      ctx.shadowColor = 'rgba(255,80,60,0.55)'; ctx.shadowBlur = 12
+      ctx.fillStyle   = '#b85050'; ctx.strokeStyle = '#ff8870'; ctx.lineWidth = 1.2
+      ctx.beginPath()
+      ctx.moveTo(13, 0); ctx.lineTo(-7, -8); ctx.lineTo(-3, 0); ctx.lineTo(-7, 8)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+    }
     ctx.restore()
 
     // Name label for bounty targets
@@ -1996,13 +2111,14 @@ function initTraders() {
       system:      sys.id,
       planet,
       state:       'docked',
-      dockTimer:   2 + Math.random() * 6,    // stagger first departures
+      dockTimer:   1 + Math.random() * 3,
       transitTimer: 0,
       destSystem:  null,
       destPlanet:  null,
       cargo:       startCom ? { [startCom]: 3 + Math.floor(Math.random() * 5) } : {},
       orbitAngle:  Math.random() * Math.PI * 2,
-      orbitSpeed:  0.25 + Math.random() * 0.35
+      orbitSpeed:  0.25 + Math.random() * 0.35,
+      x: 0, y: 0, vx: 0, vy: 0, faceAngle: 0
     })
   }
 }
@@ -2053,6 +2169,7 @@ function updateTraders(dt) {
   for (const t of npcTraders) {
     t.orbitAngle += t.orbitSpeed * dt
 
+    // ── Docked: orbiting a planet ────────────────────────────────────────────
     if (t.state === 'docked') {
       t.dockTimer -= dt
       if (t.dockTimer > 0) continue
@@ -2075,47 +2192,132 @@ function updateTraders(dt) {
 
       // Find best destination
       const dest = findBestDestination(t)
-      if (!dest) { t.dockTimer = 8 + Math.random() * 5; continue }
+      if (!dest) { t.dockTimer = 3 + Math.random() * 3; continue }
 
-      t.destSystem  = dest.sysId
-      t.destPlanet  = dest.planet
+      t.destSystem = dest.sysId
+      t.destPlanet = dest.planet
+
+      // Visible departure when in current system
+      if (t.system === player.system && systemLayout) {
+        const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
+        if (lp) {
+          const orbitR      = 38 + (t.id % 5) * 8
+          t.x               = lp.sx + Math.cos(t.orbitAngle) * orbitR
+          t.y               = lp.sy + Math.sin(t.orbitAngle) * orbitR
+          const departAngle = Math.atan2(lp.sy, lp.sx)   // radially outward from star
+          t.vx              = Math.cos(departAngle) * TRADER_SPEED
+          t.vy              = Math.sin(departAngle) * TRADER_SPEED
+          t.faceAngle       = departAngle
+          t.state           = 'departing'
+          continue
+        }
+      }
+      // Fallback: instant transit (other systems)
       t.state       = 'transit'
-      t.transitTimer = 5 + Math.random() * 8
+      t.transitTimer = 2 + Math.random() * 4
     }
+
+    // ── Departing: flying outward toward jump point ──────────────────────────
+    else if (t.state === 'departing') {
+      // If player jumped away, skip straight to transit
+      if (t.system !== player.system) {
+        t.state = 'transit'; t.transitTimer = 2 + Math.random() * 4; continue
+      }
+      t.x += t.vx * dt
+      t.y += t.vy * dt
+      const lp   = systemLayout?.planets.find(p => p.id === t.planet?.id)
+      const dist = lp ? Math.hypot(t.x - lp.sx, t.y - lp.sy) : TRADER_JUMP_DIST
+      if (dist >= TRADER_JUMP_DIST) {
+        t.state = 'transit'; t.transitTimer = 2 + Math.random() * 4
+      }
+    }
+
+    // ── Transit: traveling between systems ───────────────────────────────────
     else if (t.state === 'transit') {
       t.transitTimer -= dt
       if (t.transitTimer > 0) continue
 
-      // Arrive at destination
       t.system     = t.destSystem
       t.planet     = t.destPlanet
       t.destSystem = null
       t.destPlanet = null
-      t.state      = 'docked'
-      t.dockTimer  = 4 + Math.random() * 6
+
+      // Visible arrival when arriving in current system
+      if (t.system === player.system && systemLayout) {
+        const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
+        if (lp) {
+          const arrAngle  = Math.atan2(lp.sy, lp.sx)
+          const rad       = Math.hypot(lp.sx, lp.sy)
+          t.x             = Math.cos(arrAngle) * (rad + TRADER_JUMP_DIST)
+          t.y             = Math.sin(arrAngle) * (rad + TRADER_JUMP_DIST)
+          const inward    = arrAngle + Math.PI   // heading toward star/planet
+          t.vx            = Math.cos(inward) * TRADER_SPEED
+          t.vy            = Math.sin(inward) * TRADER_SPEED
+          t.faceAngle     = inward
+          t.state         = 'arriving'
+          continue
+        }
+      }
+      // Fallback: instant dock
+      t.state     = 'docked'
+      t.dockTimer = 2 + Math.random() * 3
+    }
+
+    // ── Arriving: flying inward toward destination planet ────────────────────
+    else if (t.state === 'arriving') {
+      // If player jumped away, instant dock
+      if (t.system !== player.system) {
+        t.state = 'docked'; t.dockTimer = 2 + Math.random() * 3; continue
+      }
+      t.x += t.vx * dt
+      t.y += t.vy * dt
+      const lp = systemLayout?.planets.find(p => p.id === t.planet?.id)
+      if (lp) {
+        const orbitR = 38 + (t.id % 5) * 8
+        if (Math.hypot(t.x - lp.sx, t.y - lp.sy) <= orbitR + 30) {
+          t.state = 'docked'; t.dockTimer = 2 + Math.random() * 3
+        }
+      } else {
+        t.state = 'docked'; t.dockTimer = 2 + Math.random() * 3
+      }
     }
   }
 }
 
 function drawTraders() {
   if (!systemLayout) return
+  const traderSprite = getShipSprite('npc_trader')
   for (const t of npcTraders) {
-    if (t.system !== player.system || t.state !== 'docked') continue
-    const lp = systemLayout.planets.find(p => p.id === t.planet.id)
-    if (!lp) continue
+    if (t.system !== player.system) continue
 
-    const r  = 38 + (t.id % 5) * 8
-    const tx = lp.sx + Math.cos(t.orbitAngle) * r
-    const ty = lp.sy + Math.sin(t.orbitAngle) * r
+    let tx, ty, angle
+    if (t.state === 'docked') {
+      const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
+      if (!lp) continue
+      const r = 38 + (t.id % 5) * 8
+      tx    = lp.sx + Math.cos(t.orbitAngle) * r
+      ty    = lp.sy + Math.sin(t.orbitAngle) * r
+      angle = t.orbitAngle + Math.PI / 2
+    } else if (t.state === 'departing' || t.state === 'arriving') {
+      tx    = t.x
+      ty    = t.y
+      angle = t.faceAngle
+    } else {
+      continue
+    }
 
     ctx.save()
     ctx.translate(tx, ty)
-    ctx.rotate(t.orbitAngle + Math.PI / 2)
-    ctx.shadowColor = 'rgba(60,200,180,0.45)'; ctx.shadowBlur = 8
-    ctx.fillStyle   = '#3ec8b8'; ctx.strokeStyle = '#7feedd'; ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(0, -7); ctx.lineTo(-5, 5); ctx.lineTo(0, 2); ctx.lineTo(5, 5)
-    ctx.closePath(); ctx.fill(); ctx.stroke()
+    ctx.rotate(angle)
+    if (traderSprite) {
+      ctx.drawImage(traderSprite, -20, -20, 40, 40)
+    } else {
+      ctx.shadowColor = 'rgba(60,200,180,0.45)'; ctx.shadowBlur = 8
+      ctx.fillStyle   = '#3ec8b8'; ctx.strokeStyle = '#7feedd'; ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(0, -7); ctx.lineTo(-5, 5); ctx.lineTo(0, 2); ctx.lineTo(5, 5)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+    }
     ctx.restore()
   }
 }
@@ -2566,8 +2768,15 @@ function travel(targetId) {
   buildSystemLayout(galaxy.systems[targetId])
 
   const arrivalPlanet = systemLayout.planets[0]
-  player.x = arrivalPlanet ? arrivalPlanet.sx + 150 : 200
-  player.y = arrivalPlanet ? arrivalPlanet.sy        : 0
+  if (arrivalPlanet) {
+    const ang = Math.atan2(arrivalPlanet.sy, arrivalPlanet.sx)
+    const rad = Math.hypot(arrivalPlanet.sx, arrivalPlanet.sy)
+    player.x  = Math.cos(ang) * (rad + 500)
+    player.y  = Math.sin(ang) * (rad + 500)
+  } else {
+    player.x = 200
+    player.y = 0
+  }
   player.landedPlanet = null
 
   // Arrive at max speed in the jump direction; normal inertia takes over immediately
@@ -2851,7 +3060,12 @@ function saveGame(slot = currentSlot) {
         destPlanetId: t.destPlanet?.id ?? null,
         cargo:        t.cargo,
         orbitAngle:   t.orbitAngle,
-        orbitSpeed:   t.orbitSpeed
+        orbitSpeed:   t.orbitSpeed,
+        x:            t.x ?? 0,
+        y:            t.y ?? 0,
+        vx:           t.vx ?? 0,
+        vy:           t.vy ?? 0,
+        faceAngle:    t.faceAngle ?? 0
       })),
       activeEvents,
       jumpCount,
@@ -2900,11 +3114,18 @@ function loadGame(slot) {
       return null
     }
 
-    npcTraders = (data.npcTraders ?? []).map(t => ({
-      ...t,
-      planet:     findPlanet(t.planetId),
-      destPlanet: findPlanet(t.destPlanetId)
-    }))
+    npcTraders = (data.npcTraders ?? []).map(t => {
+      // Departing/arriving are transient visual states — reset to docked on load
+      const safeState = (t.state === 'departing' || t.state === 'arriving') ? 'docked' : t.state
+      return {
+        ...t,
+        state:      safeState,
+        dockTimer:  safeState === 'docked' ? (t.dockTimer ?? 1 + Math.random() * 3) : t.dockTimer,
+        planet:     findPlanet(t.planetId),
+        destPlanet: findPlanet(t.destPlanetId),
+        x: t.x ?? 0, y: t.y ?? 0, vx: t.vx ?? 0, vy: t.vy ?? 0, faceAngle: t.faceAngle ?? 0
+      }
+    })
 
     activeEvents  = data.activeEvents  ?? []
     jumpCount     = data.jumpCount     ?? 0
@@ -2951,6 +3172,32 @@ function loadGame(slot) {
       const mlCount = (player.upgrades ?? []).filter(n => n === 'Missile Launcher').length
       for (let k = 0; k < Math.min(mlCount, wc); k++) player.weaponSlots[k] = 'Missile Launcher'
     }
+    // Migrate: move Rocket Launcher from weaponSlots → upgrades if it's there from an old save
+    // (Rocket Launcher changed to usesUpgradeSlot:true, usesWeaponSlot:false)
+    if (player.weaponSlots) {
+      const rli = player.weaponSlots.indexOf('Rocket Launcher')
+      if (rli >= 0) {
+        player.weaponSlots[rli] = 'Laser Cannon'  // free the weapon slot
+        if (!player.upgrades) player.upgrades = []
+        if (!player.upgrades.includes('Rocket Launcher')) player.upgrades.push('Rocket Launcher')
+      }
+    }
+    // Migrate: recalculate upgrade_slots from current GAME_UPGRADES data (catches all slot drift).
+    const baseShip = GAME_SHIPS.find(s => s.name === player.ship.name)
+    if (baseShip) {
+      let usedSlots = 0
+      for (const upgName of (player.upgrades ?? [])) {
+        const upg = GAME_UPGRADES.find(u => u.name === upgName)
+        if (upg && upg.usesUpgradeSlot) usedSlots++
+      }
+      for (const slot of (player.weaponSlots ?? [])) {
+        const upg = GAME_UPGRADES.find(u => u.name === slot)
+        if (upg && upg.usesUpgradeSlot && upg.usesWeaponSlot) usedSlots++
+      }
+      const converters = (player.upgrades ?? []).filter(n => n === 'Cargo Converter').length
+      player.ship.upgrade_slots = baseShip.upgrade_slots + converters - usedSlots
+    }
+
     computeShipStats()
     playerStats       = data.playerStats ?? { jumpsTotal:0, creditsEarned:0, creditsSpent:0, missionsCompleted:0, enemiesDestroyed:0, cargoTraded:0, planetsVisited:0 }
     planetsVisitedSet = new Set(data.planetsVisitedSet ?? [])
@@ -3061,6 +3308,8 @@ function draw(timestamp) {
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 loadKeybinds()
+loadStarSprites()
+loadShipSprites()
 initTitleStars()
 initWarpStars()
 requestAnimationFrame(draw)
