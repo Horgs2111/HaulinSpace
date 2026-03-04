@@ -224,6 +224,44 @@ function buildPlanetBlock(planet) {
     block.appendChild(refuelRow)
   }
 
+  // ── DEV: Ship tester ──────────────────────────────────────────────────────
+  const devSection = document.createElement('div')
+  devSection.className = 'dev-tester'
+
+  const devToggle = document.createElement('button')
+  devToggle.className = 'dev-tester-toggle'
+  devToggle.innerText = '🛠 For Testing'
+  devSection.appendChild(devToggle)
+
+  const devBody = document.createElement('div')
+  devBody.className = 'dev-tester-body'
+  devBody.style.display = 'none'
+
+  GAME_SHIPS.forEach(ship => {
+    const btn = document.createElement('button')
+    btn.className = 'dev-ship-btn' + (player.ship.name === ship.name ? ' active' : '')
+    btn.innerText = ship.name
+    btn.onclick = () => {
+      player.ship  = { ...ship }
+      player.cargo = {}
+      player.fuel  = ship.fuel_capacity
+      updateHUD()
+      // refresh active state
+      devBody.querySelectorAll('.dev-ship-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+    }
+    devBody.appendChild(btn)
+  })
+
+  devToggle.onclick = () => {
+    const open = devBody.style.display !== 'none'
+    devBody.style.display = open ? 'none' : 'flex'
+    devToggle.classList.toggle('open', !open)
+  }
+
+  devSection.appendChild(devBody)
+  block.appendChild(devSection)
+
   return block
 }
 

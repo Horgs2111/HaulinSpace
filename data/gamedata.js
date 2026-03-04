@@ -15,7 +15,7 @@ const GAME_SHIPS = [
   { name:'Phantom Stealth',      tier:5, cargo:50,  hull:170, speed:9,  turn_rate:9,  inertia:4,  weapon_slots:4, upgrade_slots:4, price:180000, fuel_capacity:14, hull_mass_t:280,  shield:190, shield_regen:13 },
   { name:'Aegis Destroyer',      tier:5, cargo:100, hull:260, speed:6,  turn_rate:5,  inertia:7,  weapon_slots:5, upgrade_slots:5, price:220000, fuel_capacity:14, hull_mass_t:740,  shield:220, shield_regen:14 },
   { name:'Celestial Dreadnought',tier:6, cargo:150, hull:350, speed:4,  turn_rate:4,  inertia:9,  weapon_slots:6, upgrade_slots:6, price:350000, fuel_capacity:16, hull_mass_t:1900, shield:300, shield_regen:18 },
-  { name:'Matts Ship',           tier:7, cargo:500, hull:9999,speed:15, turn_rate:10, inertia:9,  weapon_slots:50,upgrade_slots:50,price:500000, fuel_capacity:16, hull_mass_t:50,   shield:9999,shield_regen:500}
+  { name:'Matts Ship',           tier:7, cargo:500, hull:144, speed:15, turn_rate:10, inertia:9,  weapon_slots:50,upgrade_slots:50,price:500000, fuel_capacity:16, hull_mass_t:50,   shield:9999,shield_regen:500}
 ]
 
 const GAME_COMMODITIES = [

@@ -776,6 +776,7 @@ function drawSystemView() {
   }
 
   drawLoot()
+  drawCivilianNPCs()
   drawEnemies()
   drawProjectiles()
   drawTraders()
@@ -797,12 +798,21 @@ function drawShip(wx, wy, angle) {
   ctx.rotate(angle)
 
   if (thrusting || boosting) {
-    // Emit thrust particles from engine nozzle
-    const nozzleX = wx + Math.cos(angle + Math.PI) * 8
-    const nozzleY = wy + Math.sin(angle + Math.PI) * 8
+    const sz         = spriteSize(player.ship.hull)
+    const cfg        = SHIP_THRUSTER[player.ship.name] || DEFAULT_THRUSTER
     const spawnChance = boosting ? 1.0 : 0.7
     if (Math.random() < spawnChance) {
-      spawnParticles(nozzleX, nozzleY, player.vx, player.vy, boosting ? 'boost' : 'thrust', boosting ? 3 : 1)
+      const perpAngle = angle + Math.PI / 2
+      for (const nozzle of cfg.nozzles) {
+        const nx = wx + Math.cos(angle + Math.PI) * (sz / 2 * nozzle.back)
+                      + Math.cos(perpAngle)        * (sz / 2 * nozzle.side)
+        const ny = wy + Math.sin(angle + Math.PI) * (sz / 2 * nozzle.back)
+                      + Math.sin(perpAngle)        * (sz / 2 * nozzle.side)
+        spawnParticles(nx, ny, player.vx, player.vy,
+          boosting ? 'boost' : 'thrust',
+          boosting ? cfg.count * 3 : cfg.count,
+          boosting ? null : cfg)
+      }
     }
   }
 
@@ -1457,6 +1467,7 @@ function roundRect(ctx, x, y, w, h, r) {
 // ─── Combat ───────────────────────────────────────────────────────────────────
 
 let enemies        = []
+let civilianNPCs   = []
 let projectiles    = []
 let lootItems      = []
 let playerFireTimer = 0
@@ -1513,6 +1524,7 @@ function getBoltStyle(wslots) {
 
 function clearCombat() {
   enemies         = []
+  civilianNPCs    = []
   projectiles     = []
   lootItems       = []
   particles       = []
@@ -1576,6 +1588,164 @@ function spawnPirates(sys) {
       vx: 0, vy: 0,
       fireTimer: 2.0 + i * 0.9
     })
+  }
+}
+
+// ─── Civilian NPC logic ────────────────────────────────────────────────────────
+
+const CIVILIAN_PATROL_RADIUS = 900
+const CIVILIAN_WEAPON_RANGE  = 200
+
+function randomPatrolPoint() {
+  const a = Math.random() * Math.PI * 2
+  const r = 200 + Math.random() * CIVILIAN_PATROL_RADIUS
+  return { x: Math.cos(a) * r, y: Math.sin(a) * r }
+}
+
+function spawnCivilianNPCs() {
+  const lo    = 1 + Math.round(Math.random())             // 1 or 2
+  const hi    = 5 + Math.round(Math.random())             // 5 or 6
+  const count = lo + Math.floor(Math.random() * (hi - lo + 1))
+  const pool  = GAME_SHIPS.filter(s => s.tier <= 5)
+
+  for (let i = 0; i < count; i++) {
+    const ship  = { ...pool[Math.floor(Math.random() * pool.length)] }
+    const sa    = Math.random() * Math.PI * 2
+    const sd    = 300 + Math.random() * 600
+    civilianNPCs.push({
+      ship,
+      hp:           ship.hull,
+      shield:       ship.shield ?? 0,
+      shieldDelay:  0,
+      x:            Math.cos(sa) * sd,
+      y:            Math.sin(sa) * sd,
+      vx: 0, vy: 0,
+      angle:        Math.random() * Math.PI * 2,
+      fireTimer:    2 + Math.random() * 3,
+      hostile:      false,
+      patrolTarget: randomPatrolPoint(),
+      patrolTimer:  5 + Math.random() * 10
+    })
+  }
+}
+
+function updateCivilianNPCs(dt) {
+  if (activePanel || player.landedPlanet) return
+  for (const c of civilianNPCs) {
+    // Shield regen
+    if (c.shieldDelay > 0) {
+      c.shieldDelay = Math.max(0, c.shieldDelay - dt)
+    } else {
+      const maxShield = c.ship.shield ?? 0
+      if (c.shield < maxShield)
+        c.shield = Math.min(maxShield, c.shield + (c.ship.shield_regen ?? 0) * dt)
+    }
+
+    const ACCEL = c.ship.speed * 20
+    const VMAX  = c.ship.speed * 28
+    const DAMP  = Math.exp(-dt / (c.ship.inertia / 3))
+    const TURN  = c.ship.turn_rate * 25 * Math.PI / 180
+
+    if (c.hostile) {
+      // ── Hostile: chase and fire at player ─────────────────────────────────
+      const dx       = player.x - c.x
+      const dy       = player.y - c.y
+      const dist     = Math.hypot(dx, dy)
+      const toPlayer = Math.atan2(dy, dx)
+      let   diff     = toPlayer - c.angle
+      while (diff >  Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      c.angle += Math.min(Math.abs(diff), TURN * dt) * Math.sign(diff)
+
+      if (dist > CIVILIAN_WEAPON_RANGE * 0.75) {
+        c.vx += Math.cos(c.angle) * ACCEL * dt
+        c.vy += Math.sin(c.angle) * ACCEL * dt
+      }
+      c.fireTimer -= dt
+      if (dist < CIVILIAN_WEAPON_RANGE && Math.abs(diff) < 0.30 && c.fireTimer <= 0) {
+        c.fireTimer    = 1.8 / c.ship.weapon_slots
+        const spread   = (Math.random() - 0.5) * 0.18
+        const fa       = c.angle + spread
+        projectiles.push({
+          x: c.x + Math.cos(c.angle) * 14,
+          y: c.y + Math.sin(c.angle) * 14,
+          vx: Math.cos(fa) * PROJ_SPEED,
+          vy: Math.sin(fa) * PROJ_SPEED,
+          owner: 'enemy', timer: PROJ_LIFETIME,
+          style: getBoltStyle(c.ship.weapon_slots), angle: fa
+        })
+      }
+    } else {
+      // ── Friendly: wander to patrol points ─────────────────────────────────
+      c.patrolTimer -= dt
+      const pdx   = c.patrolTarget.x - c.x
+      const pdy   = c.patrolTarget.y - c.y
+      const pdist = Math.hypot(pdx, pdy)
+      if (pdist < 60 || c.patrolTimer <= 0) {
+        c.patrolTarget = randomPatrolPoint()
+        c.patrolTimer  = 8 + Math.random() * 12
+      }
+      const toTarget = Math.atan2(pdy, pdx)
+      let   diff     = toTarget - c.angle
+      while (diff >  Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      c.angle += Math.min(Math.abs(diff), TURN * dt) * Math.sign(diff)
+      if (pdist > 80) {
+        c.vx += Math.cos(c.angle) * ACCEL * dt
+        c.vy += Math.sin(c.angle) * ACCEL * dt
+      }
+    }
+
+    const spd = Math.hypot(c.vx, c.vy)
+    if (spd > VMAX) { c.vx = (c.vx / spd) * VMAX; c.vy = (c.vy / spd) * VMAX }
+    c.vx *= DAMP; c.vy *= DAMP
+    c.x  += c.vx * dt; c.y  += c.vy * dt
+
+    // Thrust particles when moving
+    if (spd > 15 && Math.random() < 0.4) {
+      const cfg  = SHIP_THRUSTER[c.ship.name] || DEFAULT_THRUSTER
+      const sz   = spriteSize(c.ship.hull)
+      const perp = c.angle + Math.PI / 2
+      for (const nozzle of cfg.nozzles) {
+        const nx = c.x + Math.cos(c.angle + Math.PI) * (sz / 2 * nozzle.back)
+                       + Math.cos(perp) * (sz / 2 * nozzle.side)
+        const ny = c.y + Math.sin(c.angle + Math.PI) * (sz / 2 * nozzle.back)
+                       + Math.sin(perp) * (sz / 2 * nozzle.side)
+        spawnParticles(nx, ny, c.vx, c.vy, 'thrust', cfg.count, cfg)
+      }
+    }
+  }
+}
+
+function drawCivilianNPCs() {
+  for (const c of civilianNPCs) {
+    const sprite = getShipSprite(c.ship.name)
+    const sz     = spriteSize(c.ship.hull)
+
+    ctx.save()
+    ctx.translate(c.x, c.y)
+    ctx.rotate(c.angle)
+    if (sprite) {
+      ctx.drawImage(sprite, -sz / 2, -sz / 2, sz, sz)
+    } else {
+      ctx.fillStyle   = c.hostile ? '#b85050' : '#50b890'
+      ctx.strokeStyle = c.hostile ? '#ff8870' : '#7feedd'
+      ctx.lineWidth   = 1.2
+      ctx.beginPath()
+      ctx.moveTo(13, 0); ctx.lineTo(-7, -8); ctx.lineTo(-3, 0); ctx.lineTo(-7, 8)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+    }
+    ctx.restore()
+
+    // Friendly/hostile status dot above ship
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(c.x, c.y - sz / 2 - 7, 3, 0, Math.PI * 2)
+    ctx.fillStyle   = c.hostile ? '#ff4444' : '#44dd88'
+    ctx.shadowColor = c.hostile ? 'rgba(255,50,50,0.8)' : 'rgba(50,220,110,0.8)'
+    ctx.shadowBlur  = 6
+    ctx.fill()
+    ctx.restore()
   }
 }
 
@@ -1834,7 +2004,8 @@ function updateProjectiles(dt) {
     let hit = false
     if (p.owner === 'player') {
       for (let j = enemies.length - 1; j >= 0; j--) {
-        if (Math.hypot(p.x - enemies[j].x, p.y - enemies[j].y) < hitRadius) {
+        const enHitR = Math.max(hitRadius, spriteSize(enemies[j].ship.hull) * 0.4)
+        if (Math.hypot(p.x - enemies[j].x, p.y - enemies[j].y) < enHitR) {
           const dmg = Math.round(calcProjectileDamage(p) * (p.damageMult ?? 1.0))
           const en = enemies[j]
           const enAbsorbed = Math.min(en.shield ?? 0, dmg)
@@ -1867,6 +2038,57 @@ function updateProjectiles(dt) {
             spawnLoot(en); enemies.splice(j, 1)
           }
           hit = true; break
+        }
+      }
+      // Check NPC traders — always hittable; die when hp reaches 0
+      if (!hit) {
+        for (let j = npcTraders.length - 1; j >= 0; j--) {
+          const t = npcTraders[j]
+          if (t.system !== player.system) continue
+          if (t.state === 'transit') continue
+          const traderHitR = Math.max(hitRadius, 20)
+          if (Math.hypot(p.x - t.x, p.y - t.y) < traderHitR) {
+            const dmg      = Math.round(calcProjectileDamage(p) * (p.damageMult ?? 1.0))
+            const absorbed = Math.min(t.shield ?? 0, dmg)
+            t.shield       = Math.max(0, (t.shield ?? 0) - dmg)
+            t.hp          -= (dmg - absorbed)
+            t.shieldDelay  = 5.0
+            spawnParticles(p.x, p.y, p.vx, p.vy, isMissileStyle ? 'explosion' : 'hit', isMissileStyle ? 18 : 6)
+            AudioEngine.hit()
+            if (t.hp <= 0) {
+              spawnParticles(t.x, t.y, t.vx, t.vy, 'explosion', 28)
+              AudioEngine.explosion()
+              playerStats.enemiesDestroyed++
+              npcTraders.splice(j, 1)
+            }
+            hit = true; break
+          }
+        }
+      }
+
+      // Check civilian NPCs — always hittable; turn hostile when shot
+      if (!hit) {
+        for (let j = civilianNPCs.length - 1; j >= 0; j--) {
+          const c = civilianNPCs[j]
+          const civHitR = Math.max(hitRadius, spriteSize(c.ship.hull) * 0.4)
+          if (Math.hypot(p.x - c.x, p.y - c.y) < civHitR) {
+            const dmg      = Math.round(calcProjectileDamage(p) * (p.damageMult ?? 1.0))
+            const absorbed = Math.min(c.shield ?? 0, dmg)
+            c.shield       = Math.max(0, (c.shield ?? 0) - dmg)
+            c.hp          -= (dmg - absorbed)
+            c.shieldDelay  = 5.0
+            c.hostile      = true
+            spawnParticles(p.x, p.y, p.vx, p.vy, isMissileStyle ? 'explosion' : 'hit', isMissileStyle ? 18 : 6)
+            AudioEngine.hit()
+            if (c.hp <= 0) {
+              spawnParticles(c.x, c.y, c.vx, c.vy, 'explosion', 28)
+              AudioEngine.explosion()
+              playerStats.enemiesDestroyed++
+              spawnLoot(c)
+              civilianNPCs.splice(j, 1)
+            }
+            hit = true; break
+          }
         }
       }
     } else {
@@ -2118,7 +2340,8 @@ function initTraders() {
       cargo:       startCom ? { [startCom]: 3 + Math.floor(Math.random() * 5) } : {},
       orbitAngle:  Math.random() * Math.PI * 2,
       orbitSpeed:  0.25 + Math.random() * 0.35,
-      x: 0, y: 0, vx: 0, vy: 0, faceAngle: 0
+      x: 0, y: 0, vx: 0, vy: 0, faceAngle: 0,
+      hp: 80, shield: 20, shieldDelay: 0
     })
   }
 }
@@ -2168,6 +2391,23 @@ function findBestDestination(trader) {
 function updateTraders(dt) {
   for (const t of npcTraders) {
     t.orbitAngle += t.orbitSpeed * dt
+
+    // Keep x/y live for docked traders so hit detection works
+    if (t.state === 'docked' && t.system === player.system && systemLayout) {
+      const lp = systemLayout.planets.find(p => p.id === t.planet?.id)
+      if (lp) {
+        const r = 38 + (t.id % 5) * 8
+        t.x = lp.sx + Math.cos(t.orbitAngle) * r
+        t.y = lp.sy + Math.sin(t.orbitAngle) * r
+      }
+    }
+
+    // Shield regen
+    if (t.shieldDelay > 0) {
+      t.shieldDelay = Math.max(0, t.shieldDelay - dt)
+    } else if (t.shield < 20) {
+      t.shield = Math.min(20, t.shield + 4 * dt)
+    }
 
     // ── Docked: orbiting a planet ────────────────────────────────────────────
     if (t.state === 'docked') {
@@ -2361,18 +2601,54 @@ function drawEventAlert() {
 
 // ─── Phase 14: Particles ──────────────────────────────────────────────────────
 
-function spawnParticles(wx, wy, baseVx, baseVy, type, count) {
+// Per-ship thruster config.
+// nozzles: array of {back, side} as fractions of sprite radius (sz/2).
+//   back: 1.0 = rear edge, side: 0 = centreline, +/- = port/starboard
+// spread:    lateral scatter multiplier (wider = fatter plume)
+// lifeScale: particle lifetime multiplier (higher = longer visible trail)
+// sizeScale: particle size multiplier
+// count:     particles spawned per nozzle per frame
+const SHIP_THRUSTER = {
+  // ── Tier 1 ──────────────────────────────────────────────────────────────
+  'Rustrunner Shuttle':    { nozzles:[{back:1.0, side:0}],                               spread:0.8, lifeScale:0.8, sizeScale:0.8, count:1 },
+  'Cinder Scout':          { nozzles:[{back:1.0, side:0}],                               spread:0.7, lifeScale:0.9, sizeScale:0.8, count:1 },
+  // ── Tier 2 ──────────────────────────────────────────────────────────────
+  'Mercury Courier':       { nozzles:[{back:1.0, side:0}],                               spread:1.0, lifeScale:1.0, sizeScale:1.0, count:1 },
+  'Atlas Freighter':       { nozzles:[{back:0.9, side:0.30}, {back:0.9, side:-0.30}],   spread:1.3, lifeScale:1.2, sizeScale:1.2, count:1 },
+  'Drake Raider':          { nozzles:[{back:1.0, side:0.15}, {back:1.0, side:-0.15}],   spread:1.0, lifeScale:1.0, sizeScale:1.0, count:1 },
+  // ── Tier 3 ──────────────────────────────────────────────────────────────
+  'Nova Trader':           { nozzles:[{back:0.85, side:0.35}, {back:0.85, side:-0.35}], spread:1.5, lifeScale:1.3, sizeScale:1.3, count:1 },
+  'Falcon Interceptor':    { nozzles:[{back:1.0, side:0}],                               spread:0.6, lifeScale:1.1, sizeScale:0.9, count:2 },
+  'Orion Gunship':         { nozzles:[{back:0.9, side:0.25}, {back:0.9, side:-0.25}],   spread:1.2, lifeScale:1.2, sizeScale:1.1, count:1 },
+  // ── Tier 4 ──────────────────────────────────────────────────────────────
+  'Titan Hauler':          { nozzles:[{back:0.85, side:0.40}, {back:0.85, side:-0.40}], spread:2.0, lifeScale:1.6, sizeScale:1.8, count:2 },
+  'Viper Strikecraft':     { nozzles:[{back:1.0, side:0}],                               spread:0.7, lifeScale:1.2, sizeScale:1.0, count:2 },
+  'Sentinel Frigate':      { nozzles:[{back:0.9, side:0.30}, {back:0.9, side:-0.30}],   spread:1.5, lifeScale:1.4, sizeScale:1.4, count:1 },
+  // ── Tier 5 ──────────────────────────────────────────────────────────────
+  'Leviathan Freighter':   { nozzles:[{back:0.8, side:0.45}, {back:0.8, side:-0.45}],   spread:2.2, lifeScale:1.8, sizeScale:2.0, count:2 },
+  'Phantom Stealth':       { nozzles:[{back:1.0, side:0}],                               spread:0.5, lifeScale:0.9, sizeScale:0.8, count:1 },
+  'Aegis Destroyer':       { nozzles:[{back:0.85, side:0.38}, {back:0.85, side:-0.38}], spread:1.8, lifeScale:1.6, sizeScale:1.7, count:2 },
+  // ── Tier 6 ──────────────────────────────────────────────────────────────
+  'Celestial Dreadnought': { nozzles:[{back:0.8, side:0.42}, {back:0.8, side:-0.42}],   spread:2.5, lifeScale:2.0, sizeScale:2.5, count:3 },
+  'Matts Ship':            { nozzles:[{back:0.8, side:0.45}, {back:0.8, side:-0.45}, {back:0.9, side:0}], spread:3.0, lifeScale:2.5, sizeScale:3.0, count:3 },
+}
+const DEFAULT_THRUSTER = { nozzles:[{back:1.0, side:0}], spread:1.0, lifeScale:1.0, sizeScale:1.0, count:1 }
+
+function spawnParticles(wx, wy, baseVx, baseVy, type, count, thrustOpts) {
+  const tSpread    = thrustOpts ? thrustOpts.spread    : 1.0
+  const tLifeScale = thrustOpts ? thrustOpts.lifeScale : 1.0
+  const tSizeScale = thrustOpts ? thrustOpts.sizeScale : 1.0
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2
     const spd   = Math.random()
     const p     = { x: wx, y: wy }
 
     if (type === 'thrust') {
-      p.vx      = baseVx * 0.2 - Math.cos(player.angle) * (40 + Math.random() * 80) + (Math.random() - 0.5) * 30
-      p.vy      = baseVy * 0.2 - Math.sin(player.angle) * (40 + Math.random() * 80) + (Math.random() - 0.5) * 30
-      p.life    = 0.20 + Math.random() * 0.18
-      p.color   = Math.random() < 0.55 ? '#88ccff' : '#c0e8ff'
-      p.size    = 1.5 + Math.random() * 1.8
+      p.vx      = baseVx * 0.2 - Math.cos(player.angle) * (40 + Math.random() * 80) + (Math.random() - 0.5) * 30 * tSpread
+      p.vy      = baseVy * 0.2 - Math.sin(player.angle) * (40 + Math.random() * 80) + (Math.random() - 0.5) * 30 * tSpread
+      p.life    = (0.20 + Math.random() * 0.18) * tLifeScale
+      p.color   = Math.random() < 0.55 ? '#ff6622' : (Math.random() < 0.5 ? '#ff9933' : '#ffcc44')
+      p.size    = (1.5 + Math.random() * 1.8) * tSizeScale
     } else if (type === 'muzzle') {
       p.vx      = baseVx * 0.4 + Math.cos(angle) * (50 + spd * 80)
       p.vy      = baseVy * 0.4 + Math.sin(angle) * (50 + spd * 80)
@@ -2806,6 +3082,7 @@ function travel(targetId) {
 
   spawnBountyTargets(galaxy.systems[targetId])
   spawnPirates(galaxy.systems[targetId])
+  spawnCivilianNPCs()
   if (!enemies.length) AudioEngine.startSpaceMusic()
   AudioEngine.dock()
   updateHUD()
@@ -3279,6 +3556,7 @@ function draw(timestamp) {
       if (protonFireTimer > 0) protonFireTimer -= dt
       updateShields(dt)
       updateEnemies(dt)
+      updateCivilianNPCs(dt)
       updateProjectiles(dt)
       updateParticles(dt)
       updateTraders(dt)

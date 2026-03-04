@@ -205,14 +205,20 @@ PHASE 10 — NPC TRADERS
 ===========================================
 
 [x] NPC trader objects in system view
-    - 15 active traders spread across the galaxy
-    - Rendered as teal freighter shapes, orbiting their docked planet
-    - Properties: system, planet, cargo, state (docked/transit), timers
+    - 30 active traders spread across the galaxy
+    - Rendered using npc_trader sprite, orbiting their docked planet
+    - Properties: system, planet, cargo, state (docked/departing/transit/arriving), timers
 
 [x] Trader AI loop
     - Sell cargo at current planet, buy cheapest commodity, pick best destination
-    - Transit timer (5–13 s) simulates jump travel; dock timer (4–10 s) before departure
+    - Transit timer simulates jump travel; dock timer before departure
     - findBestDestination: 1-hop scan for highest sell price for current cargo
+
+[x] Trader flight paths (visual departure and arrival)
+    - Traders physically fly outward from their planet before jumping (2× player jump distance = 800 units)
+    - On arrival, they appear 800 units out and fly inward to the destination planet
+    - Minimap shows traders during flight (teal dot)
+    - If player jumps away mid-flight, trader instantly transitions to transit/docked
 
 [x] NPC traders influence supply
     - applyPricePressure: ±6% per trade, clamped to [30%, 300%] of base price
@@ -323,34 +329,36 @@ All ships currently render as coloured triangles. Each needs a sprite image
 
 Player / purchasable ships (15 total — data/ships.json):
 
-[ ] sprites/ships/rustrunner_shuttle.png       — Tier 1, starter ship, small boxy utility craft
-[ ] sprites/ships/cinder_scout.png             — Tier 1, sleek fast scout
-[ ] sprites/ships/mercury_courier.png          — Tier 2, slim delivery ship
-[ ] sprites/ships/atlas_freighter.png          — Tier 2, wide-body cargo hauler
-[ ] sprites/ships/drake_raider.png             — Tier 2, aggressive mid-tier raider
-[ ] sprites/ships/nova_trader.png              — Tier 3, bulky trade vessel
-[ ] sprites/ships/falcon_interceptor.png       — Tier 3, agile interceptor
-[ ] sprites/ships/orion_gunship.png            — Tier 3, medium warship
-[ ] sprites/ships/titan_hauler.png             — Tier 4, massive cargo ship
-[ ] sprites/ships/viper_strikecraft.png        — Tier 4, fast strike fighter
-[ ] sprites/ships/sentinel_frigate.png         — Tier 4, armoured frigate
-[ ] sprites/ships/leviathan_freighter.png      — Tier 5, enormous freighter
-[ ] sprites/ships/phantom_stealth.png          — Tier 5, sleek stealth ship
-[ ] sprites/ships/aegis_destroyer.png          — Tier 5, heavy destroyer
-[ ] sprites/ships/celestial_dreadnought.png    — Tier 6, massive capital ship
+[x] Sprites/Ships/Rustrunner_Shuttle.png       — Tier 1, starter ship
+[x] Sprites/Ships/Cinder_Scout.png             — Tier 1, sleek fast scout
+[x] Sprites/Ships/Mercury_Courier.png          — Tier 2, slim delivery ship
+[x] Sprites/Ships/Atlas_Freighter.png          — Tier 2, wide-body cargo hauler
+[x] Sprites/Ships/Drake_Raider.png             — Tier 2, aggressive mid-tier raider
+[x] Sprites/Ships/Nova_Trader.png              — Tier 3, bulky trade vessel
+[x] Sprites/Ships/Falcon_Interceptor.png       — Tier 3, agile interceptor
+[x] Sprites/Ships/Orion_Gunship.png            — Tier 3, medium warship
+[x] Sprites/Ships/Titan_Hauler.png             — Tier 4, massive cargo ship
+[x] Sprites/Ships/Viper_Strikecraft.png        — Tier 4, fast strike fighter
+[x] Sprites/Ships/Sentinel_Frigate.png         — Tier 4, armoured frigate
+[x] Sprites/Ships/Leviathan_Freighter.png      — Tier 5, enormous freighter
+[x] Sprites/Ships/Phantom_Stealth.png          — Tier 5, sleek stealth ship
+[x] Sprites/Ships/Aegis_Destroyer.png          — Tier 5, heavy destroyer
+[x] Sprites/Ships/Celestial_Dreadnought.png    — Tier 6, massive capital ship
+[x] Sprites/Ships/Matts_Ship.png               — Tier 7, special ship
 
-NPC / enemy ships (these can share art with player ships or be distinct variants):
+NPC / enemy ships:
 
-[ ] sprites/ships/npc_pirate_light.png         — low-tier pirate (used for Tier 1–2 enemies)
-[ ] sprites/ships/npc_pirate_heavy.png         — high-tier pirate (used for Tier 3–5 enemies)
-[ ] sprites/ships/npc_trader.png               — NPC freighter that orbits planets
+[x] Sprites/Ships/npc_pirate_light.png         — low-tier pirate (Tier 1–2 enemies)
+[x] Sprites/Ships/npc_pirate_heavy.png         — high-tier pirate (Tier 3–5 enemies)
+[x] Sprites/Ships/npc_trader.png               — NPC freighter that orbits planets
 
-Code work (once sprites are ready):
-[ ] Load sprites via Image() objects at startup; fall back to triangle if missing
-[ ] Draw player ship using ctx.drawImage() rotated to player.angle
-[ ] Draw enemy ships using sprite mapped from their ship.tier
-[ ] Draw NPC trader using trader sprite
-[ ] Scale sprites proportionally to ship hull stat (bigger hull = slightly larger sprite)
+Code work:
+[x] Load sprites via Image() objects at startup; fall back to triangle if missing
+[x] Draw player ship using ctx.drawImage() rotated to player.angle
+[x] Draw enemy ships using sprite mapped from their ship.tier
+[x] Draw NPC trader using trader sprite
+[x] Scale sprites proportionally to ship hull stat (bigger hull = slightly larger sprite)
+[x] Show ship sprite during warp/jump animation (was showing placeholder triangle)
 
 ===========================================
 PHASE 17 — PLANET & ENVIRONMENT SPRITES
@@ -359,24 +367,30 @@ PHASE 17 — PLANET & ENVIRONMENT SPRITES
 Planets currently render as coloured circles with a glow ring.
 
 Planet type images (each type needs at least one image; multiple variants optional):
-[ ] sprites/planets/agricultural.png      — green/brown fertile world
-[ ] sprites/planets/agricultural_2.png    — variant (optional)
-[ ] sprites/planets/mining.png            — rocky, cratered, grey/orange
-[ ] sprites/planets/mining_2.png          — variant (optional)
-[ ] sprites/planets/industrial.png        — polluted, dark with city lights
-[ ] sprites/planets/trade_hub.png         — bright, well-lit megacity world
-[ ] sprites/planets/military.png          — grey, fortified appearance
-[ ] sprites/planets/frontier.png          — barren, remote, dim
+[ ] Sprites/planets/agricultural.png      — green/brown fertile world
+[ ] Sprites/planets/agricultural_2.png    — variant (optional)
+[ ] Sprites/planets/mining.png            — rocky, cratered, grey/orange
+[ ] Sprites/planets/mining_2.png          — variant (optional)
+[ ] Sprites/planets/industrial.png        — polluted, dark with city lights
+[ ] Sprites/planets/trade_hub.png         — bright, well-lit megacity world
+[ ] Sprites/planets/military.png          — grey, fortified appearance
+[ ] Sprites/planets/frontier.png          — barren, remote, dim
 
-Star / sun images:
-[ ] sprites/stars/star_yellow.png         — standard yellow star (most systems)
-[ ] sprites/stars/star_blue.png           — hot blue star
-[ ] sprites/stars/star_red.png            — red dwarf / red giant
-[ ] sprites/stars/star_white.png          — white star
+Star / sun images (10 types, loaded and assigned per system):
+[x] Sprites/stars/star_yellow.png         — standard yellow star
+[x] Sprites/stars/star_yellow_white.png   — yellow-white star
+[x] Sprites/stars/star_orange.png         — orange star
+[x] Sprites/stars/star_blue.png           — hot blue star
+[x] Sprites/stars/star_blue_giant.png     — blue giant
+[x] Sprites/stars/star_red_dwarf.png      — red dwarf
+[x] Sprites/stars/star_red_giant.png      — red giant
+[x] Sprites/stars/star_white.png          — white star
+[x] Sprites/stars/star_purple.png         — purple star (rare)
+[x] Sprites/stars/star_neutron.png        — neutron star (rare)
 
-Code work (once sprites are ready):
-[ ] Add star_type field to systems in generateGalaxy() (derived from faction/seed)
-[ ] Draw sun using star sprite instead of canvas arc
+Code work:
+[x] Assign star type deterministically per system via seeded hash of system ID
+[x] Draw sun using star sprite (320×320) instead of canvas arc; fallback to arc if not loaded
 [ ] Draw planets using planet type sprite, with slow rotation via ctx.rotate(time)
 [ ] Keep atmosphere glow ring layered on top of planet sprite
 
@@ -772,6 +786,40 @@ ECONOMY & REPUTATION HOOKS  (future extension — not in this phase)
 
     Gate tax, faction-controlled access tiers, and gate destruction are deferred.
     This phase establishes the physical infrastructure and travel mechanic only.
+
+===========================================
+PHASE 25 — POLISH 2 & BUG FIXES
+===========================================
+
+[x] Star sprites loaded and assigned per system
+    - 10 star types with weighted distribution (yellow/red dwarf most common, neutron/purple rare)
+    - Type is deterministic per system ID via Knuth hash — same system always shows same star
+
+[x] Ship sprites fully integrated
+    - All 15 player ships + Matts Ship + 3 NPC variants loaded at startup
+    - Sprite shown during warp animation (was showing placeholder triangle)
+    - Sprite size scaled to hull stat; triangle fallback if image not loaded
+
+[x] NPC trader flight paths
+    - Traders now visibly depart from planets and fly to jump distance before jumping
+    - Arriving traders fly in from jump distance to planet orbit
+    - Minimap tracks traders during flight
+
+[x] Rocket Launcher reworked
+    - Changed from weapon slot to upgrade slot (bolt-on rocket pod, not a main turret)
+    - Now coexists with Missile Launcher on any ship regardless of weapon slot count
+    - Save migration: old Rocket Launcher installs moved from weaponSlots to upgrades on load
+
+[x] Jump arrival position fixed
+    - Player now spawns radially outward 500 units past the first planet on arrival
+    - Clears the 400-unit jump exclusion zone immediately — can jump again right away
+
+[x] Upgrade slot migration on load
+    - upgrade_slots recalculated from current GAME_UPGRADES data on every save load
+    - Fixes saves corrupted by old Rocket Launcher slot behaviour
+
+[x] Delete button on save slot picker
+    - Small red ✕ button on each filled slot; confirms before deleting
 
 ===========================================
 WISHLIST — FUTURE / BIG IDEAS
