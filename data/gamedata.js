@@ -1,20 +1,20 @@
 const GAME_SHIPS = [
   //                                                                                                                                        shield  shield_regen
-  { name:'Rustrunner Shuttle',   tier:1, cargo:20,  hull:60,  speed:5,  turn_rate:8,  inertia:2,  weapon_slots:1, upgrade_slots:1, price:1000,   fuel_capacity:6,  hull_mass_t:80,   shield:30,  shield_regen:4  },
-  { name:'Cinder Scout',         tier:1, cargo:25,  hull:55,  speed:6,  turn_rate:9,  inertia:2,  weapon_slots:1, upgrade_slots:2, price:3000,   fuel_capacity:6,  hull_mass_t:75,   shield:35,  shield_regen:5  },
-  { name:'Mercury Courier',      tier:2, cargo:35,  hull:70,  speed:7,  turn_rate:8,  inertia:3,  weapon_slots:1, upgrade_slots:2, price:7000,   fuel_capacity:8,  hull_mass_t:140,  shield:50,  shield_regen:5  },
-  { name:'Atlas Freighter',      tier:2, cargo:60,  hull:90,  speed:4,  turn_rate:5,  inertia:5,  weapon_slots:2, upgrade_slots:2, price:12000,  fuel_capacity:8,  hull_mass_t:220,  shield:55,  shield_regen:5  },
-  { name:'Drake Raider',         tier:2, cargo:30,  hull:85,  speed:7,  turn_rate:7,  inertia:3,  weapon_slots:2, upgrade_slots:2, price:14000,  fuel_capacity:8,  hull_mass_t:130,  shield:60,  shield_regen:6  },
-  { name:'Nova Trader',          tier:3, cargo:80,  hull:110, speed:4,  turn_rate:5,  inertia:6,  weapon_slots:2, upgrade_slots:3, price:25000,  fuel_capacity:10, hull_mass_t:310,  shield:80,  shield_regen:7  },
-  { name:'Falcon Interceptor',   tier:3, cargo:35,  hull:95,  speed:9,  turn_rate:10, inertia:3,  weapon_slots:3, upgrade_slots:2, price:30000,  fuel_capacity:10, hull_mass_t:200,  shield:90,  shield_regen:8  },
-  { name:'Orion Gunship',        tier:3, cargo:45,  hull:130, speed:6,  turn_rate:6,  inertia:4,  weapon_slots:3, upgrade_slots:3, price:42000,  fuel_capacity:10, hull_mass_t:360,  shield:100, shield_regen:8  },
-  { name:'Titan Hauler',         tier:4, cargo:120, hull:160, speed:3,  turn_rate:4,  inertia:8,  weapon_slots:2, upgrade_slots:4, price:65000,  fuel_capacity:12, hull_mass_t:520,  shield:120, shield_regen:9  },
-  { name:'Viper Strikecraft',    tier:4, cargo:40,  hull:140, speed:10, turn_rate:10, inertia:3,  weapon_slots:4, upgrade_slots:3, price:70000,  fuel_capacity:12, hull_mass_t:260,  shield:130, shield_regen:10 },
-  { name:'Sentinel Frigate',     tier:4, cargo:90,  hull:180, speed:5,  turn_rate:5,  inertia:6,  weapon_slots:4, upgrade_slots:4, price:90000,  fuel_capacity:12, hull_mass_t:480,  shield:150, shield_regen:10 },
-  { name:'Leviathan Freighter',  tier:5, cargo:200, hull:220, speed:2,  turn_rate:3,  inertia:10, weapon_slots:3, upgrade_slots:5, price:150000, fuel_capacity:14, hull_mass_t:950,  shield:180, shield_regen:12 },
-  { name:'Phantom Stealth',      tier:5, cargo:50,  hull:170, speed:9,  turn_rate:9,  inertia:4,  weapon_slots:4, upgrade_slots:4, price:180000, fuel_capacity:14, hull_mass_t:280,  shield:190, shield_regen:13 },
-  { name:'Aegis Destroyer',      tier:5, cargo:100, hull:260, speed:6,  turn_rate:5,  inertia:7,  weapon_slots:5, upgrade_slots:5, price:220000, fuel_capacity:14, hull_mass_t:740,  shield:220, shield_regen:14 },
-  { name:'Celestial Dreadnought',tier:6, cargo:150, hull:350, speed:4,  turn_rate:4,  inertia:9,  weapon_slots:6, upgrade_slots:6, price:350000, fuel_capacity:16, hull_mass_t:1900, shield:300, shield_regen:18 },
+  { name:'Rustrunner Shuttle',   tier:1, cargo:20,  hull:60,  speed:8,  turn_rate:8,  inertia:2,  weapon_slots:1, upgrade_slots:1, price:1000,   fuel_capacity:6,  hull_mass_t:80,   shield:30,  shield_regen:4  },
+  { name:'Cinder Scout',         tier:1, cargo:25,  hull:55,  speed:9,  turn_rate:9,  inertia:2,  weapon_slots:1, upgrade_slots:2, price:3000,   fuel_capacity:6,  hull_mass_t:75,   shield:35,  shield_regen:5  },
+  { name:'Mercury Courier',      tier:2, cargo:35,  hull:70,  speed:10, turn_rate:8,  inertia:3,  weapon_slots:1, upgrade_slots:2, price:7000,   fuel_capacity:8,  hull_mass_t:140,  shield:50,  shield_regen:5  },
+  { name:'Atlas Freighter',      tier:2, cargo:60,  hull:90,  speed:6,  turn_rate:5,  inertia:5,  weapon_slots:2, upgrade_slots:2, price:12000,  fuel_capacity:8,  hull_mass_t:220,  shield:55,  shield_regen:5  },
+  { name:'Drake Raider',         tier:2, cargo:30,  hull:85,  speed:10, turn_rate:7,  inertia:3,  weapon_slots:2, upgrade_slots:2, price:14000,  fuel_capacity:8,  hull_mass_t:130,  shield:60,  shield_regen:6  },
+  { name:'Nova Trader',          tier:3, cargo:80,  hull:110, speed:6,  turn_rate:5,  inertia:6,  weapon_slots:2, upgrade_slots:3, price:25000,  fuel_capacity:10, hull_mass_t:310,  shield:80,  shield_regen:7  },
+  { name:'Falcon Interceptor',   tier:3, cargo:35,  hull:95,  speed:13, turn_rate:10, inertia:3,  weapon_slots:3, upgrade_slots:2, price:30000,  fuel_capacity:10, hull_mass_t:200,  shield:90,  shield_regen:8  },
+  { name:'Orion Gunship',        tier:3, cargo:45,  hull:130, speed:9,  turn_rate:6,  inertia:4,  weapon_slots:3, upgrade_slots:3, price:42000,  fuel_capacity:10, hull_mass_t:360,  shield:100, shield_regen:8  },
+  { name:'Titan Hauler',         tier:4, cargo:120, hull:160, speed:5,  turn_rate:4,  inertia:8,  weapon_slots:2, upgrade_slots:4, price:65000,  fuel_capacity:12, hull_mass_t:520,  shield:120, shield_regen:9  },
+  { name:'Viper Strikecraft',    tier:4, cargo:40,  hull:140, speed:15, turn_rate:10, inertia:3,  weapon_slots:4, upgrade_slots:3, price:70000,  fuel_capacity:12, hull_mass_t:260,  shield:130, shield_regen:10 },
+  { name:'Sentinel Frigate',     tier:4, cargo:90,  hull:180, speed:8,  turn_rate:5,  inertia:6,  weapon_slots:4, upgrade_slots:4, price:90000,  fuel_capacity:12, hull_mass_t:480,  shield:150, shield_regen:10 },
+  { name:'Leviathan Freighter',  tier:5, cargo:200, hull:220, speed:3,  turn_rate:3,  inertia:10, weapon_slots:3, upgrade_slots:5, price:150000, fuel_capacity:14, hull_mass_t:950,  shield:180, shield_regen:12 },
+  { name:'Phantom Stealth',      tier:5, cargo:50,  hull:170, speed:14, turn_rate:9,  inertia:4,  weapon_slots:4, upgrade_slots:4, price:180000, fuel_capacity:14, hull_mass_t:280,  shield:190, shield_regen:13 },
+  { name:'Aegis Destroyer',      tier:5, cargo:100, hull:260, speed:9,  turn_rate:5,  inertia:7,  weapon_slots:5, upgrade_slots:5, price:220000, fuel_capacity:14, hull_mass_t:740,  shield:220, shield_regen:14 },
+  { name:'Celestial Dreadnought',tier:6, cargo:150, hull:350, speed:6,  turn_rate:4,  inertia:9,  weapon_slots:6, upgrade_slots:6, price:350000, fuel_capacity:16, hull_mass_t:1900, shield:300, shield_regen:18 },
   { name:'Matts Ship',           tier:7, cargo:500, hull:144, speed:15, turn_rate:10, inertia:9,  weapon_slots:50,upgrade_slots:50,price:500000, fuel_capacity:16, hull_mass_t:50,   shield:9999,shield_regen:500}
 ]
 
@@ -80,6 +80,27 @@ const GAME_UPGRADES = [
   { tab:'defence', name:'Shield Generator',          desc:'+3 Shield regen/s. Unique.',                                                            effect:'shield_regen',    delta:3,     price:10000, limit:1, usesUpgradeSlot:true,  usesWeaponSlot:false },
   { tab:'defence', name:'Armaplast Plating',         desc:'+30 Armour. Costs 5 cargo space. Stackable.',                                          effect:'armaplast',       delta:30,    price:8000,  limit:0, usesUpgradeSlot:true,  usesWeaponSlot:false, armourMass:5  },
   { tab:'defence', name:'Durasteel Plating',         desc:'+80 Armour. Costs 20 cargo space. Stackable.',                                         effect:'durasteel',       delta:80,    price:18000, limit:0, usesUpgradeSlot:true,  usesWeaponSlot:false, armourMass:20 }
+]
+
+// ─── Equipment catalogue ──────────────────────────────────────────────────────
+// type:'engine'   → thrust_ts (T/s); affects acceleration & top speed
+// type:'thruster' → rcs_ts   (T/s); affects turn rate
+// size: 1–6 — ship must be >= this tier to install
+const GAME_EQUIPMENT = [
+  // ── Engines ──────────────────────────────────────────────────────────────────
+  { name:'Basic Ion Drive',            type:'engine',   size:1, mass_t:12, thrust_ts:40,  price:0,      desc:'Standard ion propulsion. Fitted to all starter ships.'         },
+  { name:'Improved Ion Drive',         type:'engine',   size:2, mass_t:18, thrust_ts:80,  price:8000,   desc:'+20% thrust. Efficient dual-chamber ion core.'                  },
+  { name:'Fusion Thruster',            type:'engine',   size:3, mass_t:28, thrust_ts:140, price:22000,  desc:'+35% thrust. Compact fusion drive for combat-class hulls.'      },
+  { name:'Heavy Plasma Drive',         type:'engine',   size:4, mass_t:45, thrust_ts:220, price:42000,  desc:'+55% thrust. High-output plasma jet for heavy haulers.'         },
+  { name:'Particle Accelerator Drive', type:'engine',   size:5, mass_t:65, thrust_ts:320, price:85000,  desc:'+80% thrust. Military-grade particle propulsion system.'        },
+  { name:'Quantum Flux Engine',        type:'engine',   size:6, mass_t:90, thrust_ts:450, price:165000, desc:'+112% thrust. Classified capital-ship drive core.'             },
+  // ── RCS Thrusters ────────────────────────────────────────────────────────────
+  { name:'Basic RCS Package',          type:'thruster', size:1, mass_t:4,  rcs_ts:20,  price:0,      desc:'Standard reaction control system. Fitted to all starter ships.' },
+  { name:'Precision RCS Array',        type:'thruster', size:2, mass_t:8,  rcs_ts:45,  price:10000,  desc:'+22% agility. Improved RCS for sharper handling.'              },
+  { name:'Vectored RCS System',        type:'thruster', size:3, mass_t:14, rcs_ts:80,  price:26000,  desc:'+40% agility. Gimballed jets for combat manoeuvres.'           },
+  { name:'Gyro-Stabiliser Array',      type:'thruster', size:4, mass_t:22, rcs_ts:130, price:50000,  desc:'+65% agility. Gyro-assisted RCS for heavy vessels.'            },
+  { name:'Neural Reaction Thrusters',  type:'thruster', size:5, mass_t:32, rcs_ts:190, price:98000,  desc:'+95% agility. Neural-sync rapid-response thruster pods.'       },
+  { name:'Omni-Directional Grid',      type:'thruster', size:6, mass_t:45, rcs_ts:270, price:175000, desc:'+135% agility. Full-coverage omni-directional thruster grid.'  },
 ]
 
 // Weighted: agricultural 25%, mining 20%, industrial 15%, trade_hub 12%, military 13%, frontier 15%
