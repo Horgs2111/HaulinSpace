@@ -366,15 +366,28 @@ PHASE 17 — PLANET & ENVIRONMENT SPRITES
 
 Planets currently render as coloured circles with a glow ring.
 
-Planet type images (each type needs at least one image; multiple variants optional):
-[ ] Sprites/planets/agricultural.png      — green/brown fertile world
-[ ] Sprites/planets/agricultural_2.png    — variant (optional)
-[ ] Sprites/planets/mining.png            — rocky, cratered, grey/orange
-[ ] Sprites/planets/mining_2.png          — variant (optional)
-[ ] Sprites/planets/industrial.png        — polluted, dark with city lights
-[ ] Sprites/planets/trade_hub.png         — bright, well-lit megacity world
-[ ] Sprites/planets/military.png          — grey, fortified appearance
-[ ] Sprites/planets/frontier.png          — barren, remote, dim
+Planet type images (4 variants for agricultural/mining; 3 for others):
+[x] Sprites/planets/planet_agricultural_1.png  — green/brown fertile world
+[x] Sprites/planets/planet_agricultural_2.png  — variant
+[x] Sprites/planets/planet_agricultural_3.png  — variant
+[x] Sprites/planets/planet_agricultural_4.png  — variant
+[x] Sprites/planets/planet_mining_1.png        — rocky, cratered, grey/orange
+[x] Sprites/planets/planet_mining_2.png        — variant
+[x] Sprites/planets/planet_mining_3.png        — variant
+[x] Sprites/planets/planet_mining_4.png        — variant
+[x] Sprites/planets/planet_industrial_1.png    — polluted, dark with city lights
+[x] Sprites/planets/planet_industrial_2.png    — variant
+[x] Sprites/planets/planet_industrial_3.png    — variant
+[x] Sprites/planets/planet_trade_hub_1.png     — bright, well-lit megacity world
+[x] Sprites/planets/planet_trade_hub_2.png     — variant
+[x] Sprites/planets/planet_trade_hub_3.png     — variant
+[x] Sprites/planets/planet_military_1.png      — grey, fortified appearance
+[x] Sprites/planets/planet_military_2.png      — variant
+[x] Sprites/planets/planet_military_3.png      — variant
+[x] Sprites/planets/planet_frontier_1.png      — barren, remote, dim
+[x] Sprites/planets/planet_frontier_2.png      — variant
+[x] Sprites/planets/planet_frontier_3.png      — variant
+[x] Sprites/planets/moon.png                   — decorative moon, orbits ~1 in 4 planets
 
 Star / sun images (10 types, loaded and assigned per system):
 [x] Sprites/stars/star_yellow.png         — standard yellow star
@@ -391,8 +404,9 @@ Star / sun images (10 types, loaded and assigned per system):
 Code work:
 [x] Assign star type deterministically per system via seeded hash of system ID
 [x] Draw sun using star sprite (320×320) instead of canvas arc; fallback to arc if not loaded
-[ ] Draw planets using planet type sprite, with slow rotation via ctx.rotate(time)
-[ ] Keep atmosphere glow ring layered on top of planet sprite
+[x] Draw planets using planet type sprite; variant chosen via hashStr(planet.name); fallback to arc
+[x] Keep atmosphere glow ring layered on top of planet sprite
+[x] Decorative moon orbits ~1 in 4 planets (hashStr-based, non-interactable, slowly rotates)
 
 Loot / collectibles:
 [ ] sprites/loot/cargo_pod.png            — floating loot pickup (replaces ◆ text)
@@ -434,10 +448,14 @@ PHASE 19 — REMAINING CONTENT & GAMEPLAY
     - Low rep: ships attack on sight, banned from faction shipyards/markets
     - Displayed in HUD or dedicated reputation panel
 
-[ ] Escort mission type (deferred from Phase 11)
-    - Spawn an NPC ship that follows the player through one jump
-    - Player must keep it alive; pirate aggression scales up during escort
-    - Reward on successful arrival at destination
+[x] Escort mission type
+    - Escort NPC spawns near player on accept; follows player at ~250 units
+    - Jumps alongside player (preserved through clearCombat, re-placed on arrival)
+    - Enemy shots can hit escort NPC; mission fails if it's destroyed
+    - Mission completes on landing at target system with escort alive
+    - Hop-limit expiry works same as delivery/smuggling
+    - Escort badge: green, +12 rep on completion, distinct flavor text
+    - Re-spawned on save load for active escort missions
 
 [x] Faction border overlays on galaxy map
     - Radial gradient blobs per known system, blending into soft faction territories
@@ -602,25 +620,15 @@ SHIP MASS DATA  (data/gamedata.js — GAME_SHIPS)
 
 EQUIPMENT CATALOGUE  (data/gamedata.js — new GAME_EQUIPMENT array)
 
-[ ] Each equipment object:
-      { name, type, mass_t, price, size, description,
-        thrust_ts?,    // T/s — engines only
-        rcs_ts?        // T/s — thrusters only
-      }
-    Types:
-      'engine'    — primary drive; provides TotalThrust
-      'thruster'  — RCS pods; provides TotalRCS
-      'weapon'    — weapons (already modelled, gain mass)
-      'utility'   — scanners, cargo expanders, etc. (existing upgrades)
-    'size' field limits which ship hulls can fit the item (1–6 matching ship tier)
+[x] Each equipment object:
+      { name, type, mass_t, price, size, description, thrust_ts?, rcs_ts? }
+    Types implemented: 'engine' and 'thruster' (6 tiers each)
+    'size' limits install to ships of >= that tier
 
-[ ] Starter equipment set (examples):
-      { name:'Basic Ion Drive',      type:'engine',   mass_t:12, thrust_ts:40,  size:1, price:0      }
-      { name:'Improved Ion Drive',   type:'engine',   mass_t:18, thrust_ts:75,  size:2, price:8000   }
-      { name:'Heavy Plasma Drive',   type:'engine',   mass_t:45, thrust_ts:200, size:4, price:35000  }
-      { name:'Basic RCS Package',    type:'thruster', mass_t:4,  rcs_ts:20,     size:1, price:0      }
-      { name:'Precision RCS Array',  type:'thruster', mass_t:8,  rcs_ts:50,     size:2, price:10000  }
-    (Existing GAME_UPGRADES become 'utility' equipment; keep backward compat)
+[x] Full GAME_EQUIPMENT catalogue in data/gamedata.js:
+      Engines   — Basic Ion Drive (T1) → Quantum Flux Engine (T6)
+      Thrusters — Basic RCS Package (T1) → Omni-Directional Grid (T6)
+    (Existing GAME_UPGRADES retained as-is; backward compat preserved)
 
 ---
 
@@ -661,7 +669,7 @@ GRAVITY WELLS  (game.js)
 [x] Inverse-square gravity applied to player ship each physics tick
 [x] player._gravMag stored per tick for HUD display
 [x] GRAV indicator shown in system HUD when gravity magnitude > 0.5
-[ ] Gravity applied to enemies, NPC traders, missiles (future enhancement)
+[x] Gravity applied to enemies, civilian NPCs, and missiles
 
 ---
 
@@ -684,10 +692,15 @@ CARGO JETTISON  (ui.js + game.js)
 
 EQUIPMENT SHOP  (ui.js)
 
-[ ] Replace / extend Upgrade Shop (panel-upgrades) to list GAME_EQUIPMENT
-    Filter by equipment size ≤ ship tier
-    Show mass, thrust/RCS rating alongside price
-    Installed equipment shown in player info panel with mass breakdown
+[x] Replace / extend Upgrade Shop (panel-upgrades) to list GAME_EQUIPMENT
+    - "Equipment" tab added to existing upgrade shop tab bar
+    - Filtered by size ≤ ship tier; two sections: Engines / RCS Thrusters
+    - Shows mass, thrust/RCS rating, tier requirement, price per row
+    - One engine + one thruster equipped at a time; swapping replaces current
+    - Sell button refunds 33% of cost; free items have a Remove button
+    - Fitted equipment shown in Commander Status (I key) panel
+    - Equipment mass included in computeShipStats() total mass
+    - thrust_mult / rcs_mult applied to ACCEL_BASE and TURN_BASE in physics
 
 ---
 

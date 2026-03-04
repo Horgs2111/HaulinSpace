@@ -493,9 +493,35 @@ function computeShipStats() {
     const com = GAME_COMMODITIES.find(c => c.id === id)
     cargo_mass_t += (com?.mass_t ?? 1.0) * qty
   }
-  const totalMass_t = hull_mass_t + cargo_mass_t
-  const mass_ratio  = hull_mass_t / totalMass_t  // 1.0 empty, < 1.0 loaded
-  player._mass = { hull_mass_t, cargo_mass_t, totalMass_t, mass_ratio }
+  const engineDef   = player.engine   ? GAME_EQUIPMENT.find(e => e.name === player.engine)   : null
+  const thrusterDef = player.thruster ? GAME_EQUIPMENT.find(e => e.name === player.thruster) : null
+  const equip_mass_t = (engineDef?.mass_t ?? 0) + (thrusterDef?.mass_t ?? 0)
+  const totalMass_t  = hull_mass_t + cargo_mass_t + equip_mass_t
+  const mass_ratio   = hull_mass_t / totalMass_t
+  const thrust_mult  = engineDef   ? 1 + engineDef.thrust_ts   / 400 : 1.0
+  const rcs_mult     = thrusterDef ? 1 + thrusterDef.rcs_ts    / 200 : 1.0
+  player._mass = { hull_mass_t, cargo_mass_t, equip_mass_t, totalMass_t, mass_ratio, thrust_mult, rcs_mult }
+}
+
+// Shared gravity helper — applies star + planet gravity to any object with x,y,vx,vy
+function applyGravity(obj, dt) {
+  const starDist = Math.hypot(obj.x, obj.y)
+  if (starDist > 30) {
+    const grav = 15 * (350 / starDist) * (350 / starDist) * G_SCALE
+    obj.vx -= (obj.x / starDist) * grav * dt
+    obj.vy -= (obj.y / starDist) * grav * dt
+  }
+  for (const p of (systemLayout?.planets ?? [])) {
+    const pdx   = obj.x - p.sx
+    const pdy   = obj.y - p.sy
+    const pdist = Math.hypot(pdx, pdy)
+    if (pdist > 30 && pdist < 800) {
+      const { g: pg, radius: pr } = getPlanetGravity(p)
+      const grav = pg * (pr / pdist) * (pr / pdist) * G_SCALE
+      obj.vx -= (pdx / pdist) * grav * dt
+      obj.vy -= (pdy / pdist) * grav * dt
+    }
+  }
 }
 
 // Gravity parameters by planet type
@@ -537,9 +563,11 @@ function updatePhysics(dt) {
   // Mass ratio: 1.0 when empty, lower when heavy cargo reduces performance
   const mass_ratio = player._mass?.mass_ratio ?? 1.0
 
-  const TURN_BASE  = player.ship.turn_rate * 25 * Math.PI / 180
-  const ACCEL_BASE = player.ship.speed     * 20 * (boosting ? BOOST_ACCEL : 1)
-  const VMAX_BASE  = player.ship.speed     * 30 * (boosting ? BOOST_VMAX  : 1)
+  const thrust_mult = player._mass?.thrust_mult ?? 1.0
+  const rcs_mult    = player._mass?.rcs_mult    ?? 1.0
+  const TURN_BASE  = player.ship.turn_rate * 25 * Math.PI / 180 * rcs_mult
+  const ACCEL_BASE = player.ship.speed     * 20 * (boosting ? BOOST_ACCEL : 1) * thrust_mult
+  const VMAX_BASE  = player.ship.speed     * 30 * (boosting ? BOOST_VMAX  : 1) * thrust_mult
   const DAMP       = Math.exp(-dt / (player.ship.inertia / 3))
 
   // Cargo scales performance: full hold reduces accel and top speed noticeably
@@ -1729,6 +1757,31 @@ function spawnCivilianNPCs() {
   }
 }
 
+function spawnEscortNPC(missionId, tierOverride) {
+  const tier = tierOverride ?? 2
+  const pool = GAME_SHIPS.filter(s => s.tier === tier)
+  const ship = { ...(pool[Math.floor(Math.random() * pool.length)] || GAME_SHIPS[1]) }
+  const sa = Math.random() * Math.PI * 2
+  const sd = 250 + Math.random() * 150
+  civilianNPCs.push({
+    ship,
+    hp:           ship.hull,
+    shield:       ship.shield ?? 0,
+    shieldDelay:  0,
+    x:            player.x + Math.cos(sa) * sd,
+    y:            player.y + Math.sin(sa) * sd,
+    vx: player.vx, vy: player.vy,
+    angle:        Math.random() * Math.PI * 2,
+    fireTimer:    Infinity,
+    missileTimer: Infinity,
+    hostile:      false,
+    patrolTarget: randomPatrolPoint(),
+    patrolTimer:  0,
+    escort:       true,
+    escortMissionId: missionId
+  })
+}
+
 function updateCivilianNPCs(dt) {
   if (activePanel || player.landedPlanet) return
   for (const c of civilianNPCs) {
@@ -1796,6 +1849,23 @@ function updateCivilianNPCs(dt) {
           c.missileTimer = homing ? 6 + Math.random() * 4 : 8 + Math.random() * 4
         }
       }
+    } else if (c.escort) {
+      // ── Escort: follow player at ~250 units ───────────────────────────────
+      const dx    = player.x - c.x
+      const dy    = player.y - c.y
+      const dist  = Math.hypot(dx, dy)
+      const toP   = Math.atan2(dy, dx)
+      let   diff  = toP - c.angle
+      while (diff >  Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      c.angle += Math.min(Math.abs(diff), TURN * dt) * Math.sign(diff)
+      if (dist > 300) {
+        c.vx += Math.cos(c.angle) * ACCEL * dt
+        c.vy += Math.sin(c.angle) * ACCEL * dt
+      } else if (dist < 120) {
+        c.vx -= Math.cos(c.angle) * ACCEL * 0.4 * dt
+        c.vy -= Math.sin(c.angle) * ACCEL * 0.4 * dt
+      }
     } else {
       // ── Friendly: wander to patrol points ─────────────────────────────────
       c.patrolTimer -= dt
@@ -1820,6 +1890,7 @@ function updateCivilianNPCs(dt) {
     const spd = Math.hypot(c.vx, c.vy)
     if (spd > VMAX) { c.vx = (c.vx / spd) * VMAX; c.vy = (c.vy / spd) * VMAX }
     c.vx *= DAMP; c.vy *= DAMP
+    applyGravity(c, dt)
     c.x  += c.vx * dt; c.y  += c.vy * dt
 
     // Thrust particles when moving
@@ -2064,6 +2135,7 @@ function updateEnemies(dt) {
     const spd = Math.hypot(e.vx, e.vy)
     if (spd > VMAX) { e.vx = (e.vx / spd) * VMAX; e.vy = (e.vy / spd) * VMAX }
     e.vx *= DAMP; e.vy *= DAMP
+    applyGravity(e, dt)
     e.x  += e.vx * dt; e.y  += e.vy * dt
 
     // Fire when roughly facing player and in range
@@ -2129,6 +2201,8 @@ function updateProjectiles(dt) {
       p.vy = Math.sin(p.angle) * spd
       if (Math.random() < 0.5) spawnParticles(p.x, p.y, -p.vx * 0.15, -p.vy * 0.15, 'exhaust', 1)
     }
+
+    if (p.style === 'missile' || p.style === 'missile_straight') applyGravity(p, dt)
 
     p.x    += p.vx * dt
     p.y    += p.vy * dt
@@ -2222,7 +2296,11 @@ function updateProjectiles(dt) {
             if (c.hp <= 0) {
               spawnParticles(c.x, c.y, c.vx, c.vy, 'explosion', 28)
               AudioEngine.explosion()
-              playerStats.enemiesDestroyed++
+              if (c.escort) {
+                if (typeof failEscortMission === 'function') failEscortMission(c.escortMissionId)
+              } else {
+                playerStats.enemiesDestroyed++
+              }
               spawnLoot(c)
               civilianNPCs.splice(j, 1)
             }
@@ -2249,6 +2327,31 @@ function updateProjectiles(dt) {
         spawnParticles(p.x, p.y, p.vx, p.vy, 'hit', 5)
         AudioEngine.hit()
         hit = true
+      }
+      // Enemy shots can also hit escort NPCs
+      if (!hit) {
+        for (let j = civilianNPCs.length - 1; j >= 0; j--) {
+          const c = civilianNPCs[j]
+          if (!c.escort) continue
+          const civHitR = Math.max(hitRadius, spriteSize(c.ship.hull) * 0.4)
+          if (Math.hypot(p.x - c.x, p.y - c.y) < civHitR) {
+            const dmg     = Math.round(calcProjectileDamage(p) * (p.damageMult ?? 1.0))
+            const absorbed = Math.min(c.shield ?? 0, dmg)
+            c.shield      = Math.max(0, (c.shield ?? 0) - dmg)
+            c.hp         -= (dmg - absorbed)
+            c.shieldDelay = 5.0
+            spawnParticles(p.x, p.y, p.vx, p.vy, isMissileStyle ? 'explosion' : 'hit', isMissileStyle ? 18 : 6)
+            AudioEngine.hit()
+            if (c.hp <= 0) {
+              spawnParticles(c.x, c.y, c.vx, c.vy, 'explosion', 28)
+              AudioEngine.explosion()
+              if (typeof failEscortMission === 'function') failEscortMission(c.escortMissionId)
+              spawnLoot(c)
+              civilianNPCs.splice(j, 1)
+            }
+            hit = true; break
+          }
+        }
       }
     }
     if (hit) projectiles.splice(i, 1)
@@ -3152,6 +3255,8 @@ function initGame(difficulty = 'normal') {
     fuel:         GAME_SHIPS[0].fuel_capacity,
     upgrades:     [],
     weaponSlots:  Array.from({ length: GAME_SHIPS[0].weapon_slots }, () => 'Laser Cannon'),
+    engine:       null,
+    thruster:     null,
     ammoInventory:    {},
     selectedAmmoType: null,
     ramscoopFrac:     0,
@@ -3205,6 +3310,9 @@ function travel(targetId) {
   if (!current.connections.includes(targetId)) return
   if (!systemStates.has(targetId)) return
 
+  // Preserve escort NPCs — they jump alongside the player
+  const escapingEscorts = civilianNPCs.filter(c => c.escort)
+
   clearCombat()
 
   // ── Fuel ──────────────────────────────────────────────────────────────────
@@ -3254,10 +3362,14 @@ function travel(targetId) {
   if (player.missions?.length) {
     const toRemove = new Set()
     for (const m of player.missions) {
-      if ((m.type === 'delivery' || m.type === 'smuggling') && m.target.systemId !== targetId) {
+      if ((m.type === 'delivery' || m.type === 'smuggling' || m.type === 'escort') && m.target.systemId !== targetId) {
         m.hopsLeft--
         if (m.hopsLeft <= 0) {
           removeMissionCargo(m)
+          if (m.type === 'escort') {
+            const idx = civilianNPCs.findIndex(c => c.escortMissionId === m.id)
+            if (idx !== -1) civilianNPCs.splice(idx, 1)
+          }
           toRemove.add(m.id)
           if (!missionNotify) missionNotify = { text: `Contract expired: ${m.title}`, timer: 3.5, success: false }
         }
@@ -3269,6 +3381,16 @@ function travel(targetId) {
   spawnBountyTargets(galaxy.systems[targetId])
   spawnPirates(galaxy.systems[targetId])
   spawnCivilianNPCs()
+  // Re-place escort NPCs near player in the new system (skip any that just expired)
+  const activeMissionIds = new Set((player.missions ?? []).map(m => m.id))
+  for (const esc of escapingEscorts) {
+    if (!activeMissionIds.has(esc.escortMissionId)) continue
+    const sa = Math.random() * Math.PI * 2
+    esc.x = player.x + Math.cos(sa) * (200 + Math.random() * 150)
+    esc.y = player.y + Math.sin(sa) * (200 + Math.random() * 150)
+    esc.vx = player.vx; esc.vy = player.vy
+    civilianNPCs.push(esc)
+  }
   if (!enemies.length) AudioEngine.startSpaceMusic()
   AudioEngine.dock()
   updateHUD()
@@ -3515,6 +3637,8 @@ function saveGame(slot = currentSlot) {
         fuel:          player.fuel ?? player.ship.fuel_capacity,
         upgrades:      player.upgrades,
         weaponSlots:   player.weaponSlots  ?? [],
+        engine:        player.engine       ?? null,
+        thruster:      player.thruster     ?? null,
         ammoInventory:    player.ammoInventory    ?? {},
         selectedAmmoType: player.selectedAmmoType ?? null,
         ramscoopFrac:     player.ramscoopFrac     ?? 0,
@@ -3639,6 +3763,8 @@ function loadGame(slot) {
     else GAME_FACTIONS.forEach(f => { if (!(f.name in player.factionRep)) player.factionRep[f.name] = 0 })
     if (!player.difficulty)             player.difficulty      = 'normal'
     if (player.angularVelocity == null) player.angularVelocity = 0
+    if (player.engine   === undefined)  player.engine          = null
+    if (player.thruster === undefined)  player.thruster        = null
     if (player.shield == null)          player.shield          = player.ship.shield ?? 0
     if (player.shieldDelay == null)     player.shieldDelay     = 0
     if (player.armour == null)          player.armour          = 0
@@ -3693,6 +3819,11 @@ function loadGame(slot) {
     clearCombat()
     generateNebulaFields()
     buildSystemLayout(galaxy.systems[player.system])
+    spawnCivilianNPCs()
+    // Respawn escort NPCs for active escort missions
+    for (const m of (player.missions ?? [])) {
+      if (m.type === 'escort') spawnEscortNPC(m.id, m.escortTier)
+    }
     updateHUD()
     updateJumpHUD()
     currentSlot = s

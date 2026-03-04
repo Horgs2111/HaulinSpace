@@ -17,7 +17,7 @@ const PIRATE_NAMES = [
   'Ezra Kane', 'The Pale Hand'
 ]
 
-const MISSION_TYPE_LABEL = { delivery: 'Delivery', bounty: 'Bounty', smuggling: 'Smuggling' }
+const MISSION_TYPE_LABEL = { delivery: 'Delivery', bounty: 'Bounty', smuggling: 'Smuggling', escort: 'Escort' }
 
 const FACILITIES = [
   { key: 'market',       label: 'Market',        desc: 'Buy and sell commodities'                     },
@@ -247,6 +247,9 @@ function buildPlanetBlock(planet) {
       player.fuel        = ship.fuel_capacity
       player.weaponSlots = Array.from({ length: ship.weapon_slots }, () => 'Laser Cannon')
       player.upgrades    = []
+      player.engine      = null
+      player.thruster    = null
+      computeShipStats()
       updateHUD()
       // refresh active state
       devBody.querySelectorAll('.dev-ship-btn').forEach(b => b.classList.remove('active'))
@@ -869,7 +872,7 @@ function renderUpgradeShop() {
     `<span>${d.label}: <strong>${player.ship[d.key]}</strong></span>`
   ).join('\n')
 
-  const TAB_LABELS = { ship: 'Ship Upgrades', weapons: 'Weapons', defence: 'Defence' }
+  const TAB_LABELS = { ship: 'Ship Upgrades', weapons: 'Weapons', defence: 'Defence', equipment: 'Equipment' }
   const tabBarHtml = Object.keys(TAB_LABELS).map(t =>
     `<button class="upgrade-tab${t === activeUpgradeTab ? ' active' : ''}" onclick="setUpgradeTab('${t}')">${TAB_LABELS[t]}</button>`
   ).join('')
@@ -884,6 +887,8 @@ function renderUpgradeShop() {
   // Filter to active tab
   const listEl = document.getElementById('upgrades-list')
   listEl.innerHTML = ''
+
+  if (activeUpgradeTab === 'equipment') { renderEquipmentTab(listEl); return }
 
   const tabItems   = GAME_UPGRADES.map((u, i) => ({ ...u, idx: i })).filter(u => u.tab === activeUpgradeTab)
   const mainItems  = tabItems.filter(u => u.effect !== 'ammo')
@@ -984,6 +989,73 @@ function renderUpgradeShop() {
     listEl.appendChild(hdr)
     ammoItems.forEach(renderItem)
   }
+}
+
+function renderEquipmentTab(listEl) {
+  const tier    = player.ship.tier ?? 1
+  const engines   = GAME_EQUIPMENT.filter(e => e.type === 'engine'   && e.size <= tier)
+  const thrusters = GAME_EQUIPMENT.filter(e => e.type === 'thruster' && e.size <= tier)
+
+  const renderSection = (items, slotKey, sectionTitle) => {
+    const hdr = document.createElement('div')
+    hdr.className = 'upgrade-ammo-section-hdr'
+    hdr.innerText = sectionTitle
+    listEl.appendChild(hdr)
+
+    for (const eq of items) {
+      const fitted    = player[slotKey] === eq.name
+      const canAfford = player.credits >= eq.price
+      const perfStat  = eq.thrust_ts != null
+        ? `Thrust: ${eq.thrust_ts} T/s (+${Math.round(eq.thrust_ts / 4)}%)`
+        : `Agility: ${eq.rcs_ts} T/s (+${Math.round(eq.rcs_ts / 2)}%)`
+      const tipLines = [eq.desc, perfStat, `Mass: ${eq.mass_t} T`, `Req. tier: ${eq.size}`, `Price: ${eq.price > 0 ? eq.price.toLocaleString() + ' cr' : 'Free'}`].join('\n')
+      const sellPrice = Math.floor(eq.price / 3)
+
+      let btnHtml
+      if (fitted) {
+        btnHtml = `<button class="btn-install btn-fitted" disabled>✓ Fitted</button>` +
+          (eq.price > 0 ? `<button class="btn-sell" onclick="removeEquipment('${slotKey}',${sellPrice})">Sell ${sellPrice.toLocaleString()} cr</button>`
+                        : `<button class="btn-sell" onclick="removeEquipment('${slotKey}',0)">Remove</button>`)
+      } else {
+        btnHtml = `<button class="btn-install" ${canAfford ? '' : 'disabled'} onclick="installEquipment('${eq.name}','${slotKey}')">
+          ${eq.price > 0 ? 'Buy & Install' : 'Install Free'}
+        </button>`
+      }
+
+      const row = document.createElement('div')
+      row.className = 'upgrade-row' + (fitted ? ' upgrade-fitted' : '')
+      row.innerHTML =
+        `<div class="upgrade-info">` +
+          `<div class="upgrade-name">${eq.name} <span class="equip-size-badge">Tier ${eq.size}+</span></div>` +
+          `<div class="upgrade-effect">${perfStat}  ·  ${eq.mass_t} T</div>` +
+          `<div class="upgrade-tooltip-box">${tipLines.replace(/\n/g, '<br>')}</div>` +
+        `</div>` +
+        `<div class="upgrade-price">${eq.price > 0 ? eq.price.toLocaleString() + ' cr' : 'Free'}</div>` +
+        `<div class="upgrade-btns">${btnHtml}</div>`
+      listEl.appendChild(row)
+    }
+  }
+
+  renderSection(engines,   'engine',   'Engines')
+  renderSection(thrusters, 'thruster', 'RCS Thrusters')
+}
+
+function installEquipment(name, slotKey) {
+  const eq = GAME_EQUIPMENT.find(e => e.name === name)
+  if (!eq || player.credits < eq.price) return
+  player.credits     -= eq.price
+  player[slotKey]     = eq.name
+  computeShipStats()
+  renderUpgradeShop()
+  updateHUD()
+}
+
+function removeEquipment(slotKey, sellValue) {
+  player[slotKey]  = null
+  player.credits  += sellValue
+  computeShipStats()
+  renderUpgradeShop()
+  updateHUD()
 }
 
 function getUpgradeStatChange(upgrade) {
@@ -1170,6 +1242,7 @@ function pickMissionType(target) {
   if (ftype === 'pirate' && r < 0.50) return 'bounty'
   if (target.piracyLevel > 0.45 && r < 0.30) return 'bounty'
   if (r < 0.18) return 'smuggling'
+  if (r < 0.30) return 'escort'
   return 'delivery'
 }
 
@@ -1225,6 +1298,24 @@ function buildMission(type, target) {
       desc:  `Deliver a ${g.desc} to contacts in ${target.name}. High reward — faction reputation risk if caught. ${hops} jump limit.`,
       target: { systemId: target.id, systemName: target.name },
       hopsLeft: hops,
+      reward
+    }
+  }
+
+  if (type === 'escort') {
+    const names   = ['Dr. Vael Orin', 'Ambassador Cresh', 'Merchant Tolba', 'Agent Ryn', 'Delegate Mara Solus']
+    const name    = names[Math.floor(Math.random() * names.length)]
+    const hops    = 2 + Math.floor(Math.random() * 3)
+    const tier    = 1 + Math.floor(Math.random() * 3)           // escort ship tier 1–3
+    const reward  = Math.round(3000 + tier * 1500 + Math.random() * 2500)
+    return {
+      id, type,
+      title:      `Escort ${name}`,
+      desc:       `Safely escort ${name} to ${target.name}. Their vessel will fly alongside yours — keep them alive. ${hops} jump limit.`,
+      target:     { systemId: target.id, systemName: target.name },
+      escortName: name,
+      escortTier: tier,
+      hopsLeft:   hops,
       reward
     }
   }
@@ -1350,6 +1441,13 @@ function buildMissionCard(m, isActive, idx) {
     meta.className = 'mission-meta'; meta.innerText = `Target system: ${m.target.systemName}`
     left.appendChild(meta)
   }
+  if (isActive && m.type === 'escort') {
+    const alive = civilianNPCs.some(c => c.escortMissionId === m.id)
+    const meta  = document.createElement('div')
+    meta.className = 'mission-meta'
+    meta.innerText = alive ? `Escort alive — heading to ${m.target.systemName}` : `Escort: not in system`
+    left.appendChild(meta)
+  }
   footer.appendChild(left)
 
   const btn = document.createElement('button')
@@ -1359,8 +1457,9 @@ function buildMissionCard(m, isActive, idx) {
   } else {
     const cargoUsed  = Object.values(player.cargo).reduce((s, n) => s + n, 0)
     const noRoom     = !!(m.commodityId && m.cargoQty && cargoUsed + m.cargoQty > player.ship.cargo)
+    const atLimit    = (player.missions?.length ?? 0) >= 5
     btn.className    = 'btn-accept'; btn.innerText = noRoom ? 'No room' : 'Accept'
-    btn.disabled     = (player.missions?.length ?? 0) >= 5 || noRoom
+    btn.disabled     = atLimit || noRoom
     btn.onclick      = () => { acceptMission(idx); renderMissionBoard() }
   }
   footer.appendChild(btn)
@@ -1387,13 +1486,20 @@ function acceptMission(idx) {
 
   player.missions.push(m)
   availableMissions.splice(idx, 1)
+  if (m.type === 'escort') spawnEscortNPC(m.id, m.escortTier)
   AudioEngine.notify(true)
 }
 
 function abandonMission(missionId) {
   if (!player.missions) return
   const m = player.missions.find(m => m.id === missionId)
-  if (m) removeMissionCargo(m)
+  if (m) {
+    removeMissionCargo(m)
+    if (m.type === 'escort') {
+      const idx = civilianNPCs.findIndex(c => c.escortMissionId === missionId)
+      if (idx !== -1) civilianNPCs.splice(idx, 1)
+    }
+  }
   player.missions = player.missions.filter(m => m.id !== missionId)
   updateHUD()
 }
@@ -1419,7 +1525,7 @@ function renderPlayerInfo() {
   // ── Ship stats ──
   const ms       = player._mass
   const massLine = ms
-    ? `${ms.hull_mass_t} T hull + ${ms.cargo_mass_t.toFixed(1)} T cargo = ${ms.totalMass_t.toFixed(1)} T (${Math.round(ms.mass_ratio * 100)}% thrust)`
+    ? `${ms.hull_mass_t} T hull + ${ms.cargo_mass_t.toFixed(1)} T cargo + ${(ms.equip_mass_t ?? 0).toFixed(0)} T equip = ${ms.totalMass_t.toFixed(1)} T (${Math.round(ms.mass_ratio * 100)}% perf)`
     : '—'
   const statRows = [
     ['Hull',          `${player.hp} / ${s.hull}`],
@@ -1515,6 +1621,16 @@ function renderPlayerInfo() {
   }
   html += `</div>`
 
+  // ── Fitted equipment ──
+  const engDef = player.engine   ? GAME_EQUIPMENT.find(e => e.name === player.engine)   : null
+  const rsDef  = player.thruster ? GAME_EQUIPMENT.find(e => e.name === player.thruster) : null
+  if (engDef || rsDef) {
+    html += `<div class="pi-section-title">Fitted Equipment</div><div class="pi-section"><div class="pi-upgrade-list">`
+    if (engDef) html += `<div class="pi-upgrade-row"><span class="pi-upgrade-name">${engDef.name}</span><span class="pi-upgrade-eff">+${Math.round(engDef.thrust_ts / 4)}% thrust · ${engDef.mass_t} T</span></div>`
+    if (rsDef)  html += `<div class="pi-upgrade-row"><span class="pi-upgrade-name">${rsDef.name}</span><span class="pi-upgrade-eff">+${Math.round(rsDef.rcs_ts / 2)}% agility · ${rsDef.mass_t} T</span></div>`
+    html += `</div></div>`
+  }
+
   // ── Active missions ──
   const missions = player.missions ?? []
   html += `<div class="pi-section-title">Active Missions</div><div class="pi-section">`
@@ -1591,24 +1707,46 @@ function renderActiveMissions() {
 const MISSION_FLAVOR = {
   delivery:  ['Package delivered. Contract fulfilled.', 'Goods received. Payment incoming.', 'Delivery confirmed. Well done, Commander.'],
   smuggling: ['Contraband offloaded. No questions asked.', 'Contact satisfied. Credits transferred.', 'Shipment received. Stay off the scanners.'],
-  bounty:    ['Target eliminated. Bounty confirmed.', 'Contract closed. Good hunting, Commander.']
+  bounty:    ['Target eliminated. Bounty confirmed.', 'Contract closed. Good hunting, Commander.'],
+  escort:    ['Passenger delivered safely. Well done, Commander.', 'Escort contract fulfilled. Your reputation precedes you.', 'Client arrived intact. Payment confirmed.']
 }
 
 function checkMissionCompletions() {
   if (!player.missions?.length) return
   const sysId = galaxy.systems[player.system].id
-  const completing = player.missions.filter(
-    m => (m.type === 'delivery' || m.type === 'smuggling') && m.target.systemId === sysId
-  )
+  const completing = player.missions.filter(m => {
+    if (m.target.systemId !== sysId) return false
+    if (m.type === 'delivery' || m.type === 'smuggling') return true
+    if (m.type === 'escort') {
+      // Escort NPC must still be alive
+      return civilianNPCs.some(c => c.escortMissionId === m.id)
+    }
+    return false
+  })
   if (completing.length === 0) return
 
-  // Remove cargo and missions from active list now; credits awarded on collect
-  for (const m of completing) removeMissionCargo(m)
+  // Remove escort NPCs that completed
+  for (const m of completing) {
+    removeMissionCargo(m)
+    if (m.type === 'escort') {
+      const idx = civilianNPCs.findIndex(c => c.escortMissionId === m.id)
+      if (idx !== -1) civilianNPCs.splice(idx, 1)
+    }
+  }
   player.missions = player.missions.filter(m => !completing.some(c => c.id === m.id))
   updateHUD()
 
   missionCompleteQueue = [...completing]
   showNextMissionComplete()
+}
+
+function failEscortMission(missionId) {
+  if (!player.missions) return
+  const m = player.missions.find(m => m.id === missionId)
+  if (!m) return
+  player.missions = player.missions.filter(m => m.id !== missionId)
+  if (!missionNotify) missionNotify = { text: `Escort failed: ${m.escortName ?? 'Client'} was destroyed.`, timer: 4.5, success: false }
+  updateHUD()
 }
 
 function showNextMissionComplete() {
@@ -1647,7 +1785,7 @@ function collectMissionReward() {
   // Faction rep
   const targetSys = galaxy.systems.find(s => s.id === m.target?.systemId)
   if (targetSys) {
-    adjustRep(targetSys.faction, m.type === 'smuggling' ? 5 : 8)
+    adjustRep(targetSys.faction, m.type === 'smuggling' ? 5 : m.type === 'escort' ? 12 : 8)
     if (m.type === 'smuggling') adjustRep('Federation Navy', -8)
   }
   updateHUD()
@@ -2036,8 +2174,34 @@ function closeOptions() {
 
 // ─── Credits screen ───────────────────────────────────────────────────────────
 
+const CREDITS_CONTROLS = [
+  { action: 'thrust',    label: 'Thrust forward'              },
+  { action: 'brake',     label: 'Brake / reverse'             },
+  { action: 'turnLeft',  label: 'Rotate left'                 },
+  { action: 'turnRight', label: 'Rotate right'                },
+  { action: 'boost',     label: 'Boost'                       },
+  { action: 'land',      label: 'Land / leave planet'         },
+  { action: 'map',       label: 'Galaxy Map'                  },
+  { action: 'jump',      label: 'Jump'                        },
+  { action: 'fire',      label: 'Fire weapon'                 },
+  { action: 'missile',   label: 'Fire missile / rocket'       },
+  { action: 'cycleAmmo', label: 'Cycle ammo type'             },
+  { action: 'target',    label: 'Cycle target'                },
+  { action: 'info',      label: 'Commander Status'            },
+  { action: 'pause',     label: 'Pause / Menu'                },
+]
+
+function renderCreditsControls() {
+  const grid = document.getElementById('credits-controls-grid')
+  if (!grid) return
+  grid.innerHTML = CREDITS_CONTROLS.map(({ action, label }) =>
+    `<span class="ck">${keyLabel(keybinds[action] ?? DEFAULT_KEYBINDS[action])}</span><span class="cv">${label}</span>`
+  ).join('')
+}
+
 function openCredits() {
   gameState = 'credits'
+  renderCreditsControls()
   document.getElementById('screen-menu').classList.add('hidden')
   document.getElementById('screen-credits').classList.remove('hidden')
 }

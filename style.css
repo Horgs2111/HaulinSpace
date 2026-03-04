@@ -1541,6 +1541,7 @@ canvas {
 .mission-type-delivery  { background: rgba(80, 130, 210, 0.25); color: #7799cc; }
 .mission-type-bounty    { background: rgba(200, 80,  60, 0.25);  color: #cc6655; }
 .mission-type-smuggling { background: rgba(180, 140, 40, 0.25);  color: #ccaa44; }
+.mission-type-escort    { background: rgba(80, 190, 130, 0.25);  color: #55bb88; }
 
 .mission-desc {
   font-size: 13px;
@@ -1912,6 +1913,14 @@ canvas {
   color: #77aacc;
   font-weight: 400;
   margin-left: 6px;
+}
+
+.equip-size-badge {
+  font-size: 10px;
+  color: #778899;
+  font-weight: 400;
+  margin-left: 6px;
+  letter-spacing: 0.03em;
 }
 
 .btn-fitted {
