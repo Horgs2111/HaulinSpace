@@ -1971,7 +1971,7 @@ function initMenuUI() {
   // Title screen: any key or click advances to menu
   document.getElementById('screen-title').addEventListener('click', showMenu)
   document.addEventListener('keydown', e => {
-    if (gameState === 'title') showMenu()
+    if (gameState === 'title' && e.key !== 'Meta' && e.key !== 'OS') showMenu()
   })
 }
 
