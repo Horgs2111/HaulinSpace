@@ -711,6 +711,55 @@ function getShipSprite(name) {
   return (img && img.complete && img.naturalWidth > 0) ? img : null
 }
 
+// ─── Planet sprites ────────────────────────────────────────────────────────────
+
+const PLANET_SPRITE_VARIANTS = {
+  agricultural: 4,
+  mining:       4,
+  industrial:   3,
+  trade_hub:    3,
+  military:     3,
+  frontier:     3,
+}
+
+const PLANET_SPRITES = {}
+let   moonSprite     = null
+
+function loadPlanetSprites() {
+  for (const [type, count] of Object.entries(PLANET_SPRITE_VARIANTS)) {
+    for (let i = 1; i <= count; i++) {
+      const key = `${type}_${i}`
+      const img = new Image()
+      img.src   = `Sprites/planets/planet_${type}_${i}.png`
+      PLANET_SPRITES[key] = img
+    }
+  }
+  moonSprite     = new Image()
+  moonSprite.src = 'Sprites/planets/moon.png'
+}
+
+function hashStr(str) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
+function getPlanetSprite(planet) {
+  const count = PLANET_SPRITE_VARIANTS[planet.type]
+  if (!count) return null
+  const idx = (hashStr(planet.name) % count) + 1
+  const img = PLANET_SPRITES[`${planet.type}_${idx}`]
+  return (img && img.complete && img.naturalWidth > 0) ? img : null
+}
+
+function planetHasMoon(planet) {
+  return hashStr(planet.name + 'moon') % 4 === 0   // ~1-in-4 planets
+}
+
+function getMoonSprite() {
+  return (moonSprite && moonSprite.complete && moonSprite.naturalWidth > 0) ? moonSprite : null
+}
+
 function spriteSize(hull) {
   return Math.round(Math.max(56, Math.min(192, 80 * Math.sqrt(hull / 100))))
 }
@@ -757,13 +806,36 @@ function drawSystemView() {
     ctx.beginPath(); ctx.arc(0, 0, radius + 42, 0, Math.PI * 2); ctx.fill()
     ctx.restore()
 
-    // Planet body
+    // Planet body — sprite if loaded, else canvas circle fallback
+    const pSprite = getPlanetSprite(p)
     ctx.save()
-    ctx.shadowColor = isNear ? '#88ccff' : 'rgba(80,140,220,0.4)'
+    ctx.shadowColor = isNear ? '#88ccff' : 'rgba(80,140,220,0.3)'
     ctx.shadowBlur  = isNear ? 24 : 10
-    ctx.fillStyle   = isNear ? '#aaddff' : '#5577aa'
-    ctx.beginPath(); ctx.arc(p.sx, p.sy, radius, 0, Math.PI * 2); ctx.fill()
+    if (pSprite) {
+      ctx.drawImage(pSprite, p.sx - radius, p.sy - radius, radius * 2, radius * 2)
+    } else {
+      ctx.fillStyle = isNear ? '#aaddff' : '#5577aa'
+      ctx.beginPath(); ctx.arc(p.sx, p.sy, radius, 0, Math.PI * 2); ctx.fill()
+    }
     ctx.restore()
+
+    // Moon — orbits ~1-in-4 planets, purely decorative
+    if (planetHasMoon(p)) {
+      const mSprite  = getMoonSprite()
+      const mAngle   = Date.now() / 8000 + hashStr(p.name) * 1.3
+      const mOrbit   = radius + 26
+      const mx       = p.sx + Math.cos(mAngle) * mOrbit
+      const my       = p.sy + Math.sin(mAngle) * mOrbit
+      const mSize    = 10
+      ctx.save()
+      if (mSprite) {
+        ctx.drawImage(mSprite, mx - mSize, my - mSize, mSize * 2, mSize * 2)
+      } else {
+        ctx.fillStyle = '#999999'
+        ctx.beginPath(); ctx.arc(mx, my, mSize * 0.7, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.restore()
+    }
 
     const dist = Math.hypot(player.x - p.sx, player.y - p.sy)
     if (dist < 700) {
@@ -782,6 +854,7 @@ function drawSystemView() {
   drawTraders()
   drawParticles()
   drawShip(player.x, player.y, player.angle)
+  drawTargetBox()
   ctx.restore()
   drawOffscreenArrows()
   drawCombatHUD()
@@ -918,8 +991,22 @@ function drawMinimap() {
     } else { continue }
     const rx = (wx - player.x) * scale
     const ry = (wy - player.y) * scale
-    mc.beginPath(); mc.arc(cx + rx, cy + ry, 2, 0, Math.PI * 2)
-    mc.fillStyle = '#3ec8b8'; mc.fill()
+    const isLocked = t === navCombatTarget
+    mc.beginPath(); mc.arc(cx + rx, cy + ry, isLocked ? 3.5 : 2, 0, Math.PI * 2)
+    mc.fillStyle = isLocked ? '#ff8800' : '#3ec8b8'; mc.fill()
+  }
+
+  // Civilian NPCs
+  for (const c of civilianNPCs) {
+    const dx = (c.x - player.x) * scale
+    const dy = (c.y - player.y) * scale
+    const d  = Math.hypot(dx, dy)
+    const edgeR = R - 3
+    const bx = d > edgeR ? cx + (dx / d) * edgeR : cx + dx
+    const by = d > edgeR ? cy + (dy / d) * edgeR : cy + dy
+    const isLocked = c === navCombatTarget
+    mc.beginPath(); mc.arc(bx, by, isLocked ? 3.5 : 2.5, 0, Math.PI * 2)
+    mc.fillStyle = isLocked ? '#ff8800' : (c.hostile ? '#ff4444' : '#44dd88'); mc.fill()
   }
 
   // Loot
@@ -1522,6 +1609,14 @@ function getBoltStyle(wslots) {
   return 'bolt_light'
 }
 
+// Weapon grade for hostile civilian NPCs — scales with ship tier
+function getBoltStyleByTier(tier) {
+  if (tier >= 6) return 'bolt_proton'
+  if (tier >= 4) return 'bolt_heavy'
+  if (tier >= 2) return 'bolt_medium'
+  return 'bolt_light'
+}
+
 function clearCombat() {
   enemies         = []
   civilianNPCs    = []
@@ -1622,6 +1717,7 @@ function spawnCivilianNPCs() {
       vx: 0, vy: 0,
       angle:        Math.random() * Math.PI * 2,
       fireTimer:    2 + Math.random() * 3,
+      missileTimer: ship.tier >= 5 ? 4 + Math.random() * 4 : Infinity,
       hostile:      false,
       patrolTarget: randomPatrolPoint(),
       patrolTimer:  5 + Math.random() * 10
@@ -1672,8 +1768,29 @@ function updateCivilianNPCs(dt) {
           vx: Math.cos(fa) * PROJ_SPEED,
           vy: Math.sin(fa) * PROJ_SPEED,
           owner: 'enemy', timer: PROJ_LIFETIME,
-          style: getBoltStyle(c.ship.weapon_slots), angle: fa
+          style: getBoltStyleByTier(c.ship.tier), angle: fa
         })
+      }
+      // Missile fire — tier 5 straight, tier 6 homing
+      if (c.ship.tier >= 5) {
+        c.missileTimer -= dt
+        if (dist < CIVILIAN_WEAPON_RANGE * 1.8 && c.missileTimer <= 0) {
+          const homing = c.ship.tier >= 6
+          const mspd   = MISSILE_SPEED * (homing ? 1.0 : 1.3)
+          projectiles.push({
+            x: c.x + Math.cos(c.angle) * 14,
+            y: c.y + Math.sin(c.angle) * 14,
+            vx: Math.cos(c.angle) * mspd,
+            vy: Math.sin(c.angle) * mspd,
+            owner: 'enemy', timer: MISSILE_LIFETIME,
+            style: homing ? 'missile' : 'missile_straight',
+            angle: c.angle,
+            baseDmg: homing ? 70 : 55,
+            hitRadius: MISSILE_HIT_RADIUS,
+            homingPlayer: homing
+          })
+          c.missileTimer = homing ? 6 + Math.random() * 4 : 8 + Math.random() * 4
+        }
       }
     } else {
       // ── Friendly: wander to patrol points ─────────────────────────────────
@@ -1970,12 +2087,17 @@ function updateProjectiles(dt) {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const p = projectiles[i]
 
-    // Homing — steer toward nearest enemy (homing_missile only, not straight variants)
-    if (p.style === 'missile' && p.owner === 'player' && enemies.length > 0) {
-      let nearest = null, bestDist = Infinity
-      for (const e of enemies) {
-        const d = Math.hypot(p.x - e.x, p.y - e.y)
-        if (d < bestDist) { bestDist = d; nearest = e }
+    // Homing — steer toward TAB-locked target, or nearest hostile
+    if (p.style === 'missile' && p.owner === 'player') {
+      const homingTargets = [...enemies, ...civilianNPCs.filter(c => c.hostile)]
+      // Prefer TAB-locked target (any type); fall back to nearest hostile
+      let nearest = (navCombatTarget && navCombatTarget.x != null) ? navCombatTarget : null
+      if (!nearest) {
+        let bestDist = Infinity
+        for (const e of homingTargets) {
+          const d = Math.hypot(p.x - e.x, p.y - e.y)
+          if (d < bestDist) { bestDist = d; nearest = e }
+        }
       }
       if (nearest) {
         const desired = Math.atan2(nearest.y - p.y, nearest.x - p.x)
@@ -1988,6 +2110,19 @@ function updateProjectiles(dt) {
         p.vy = Math.sin(p.angle) * spd
       }
       // Flame trail
+      if (Math.random() < 0.5) spawnParticles(p.x, p.y, -p.vx * 0.15, -p.vy * 0.15, 'exhaust', 1)
+    }
+
+    // Enemy homing missile — steer toward player
+    if (p.style === 'missile' && p.owner === 'enemy' && p.homingPlayer) {
+      const desired = Math.atan2(player.y - p.y, player.x - p.x)
+      let diff = desired - p.angle
+      while (diff >  Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      p.angle += Math.min(Math.abs(diff), MISSILE_TURN * dt) * Math.sign(diff)
+      const spd = Math.hypot(p.vx, p.vy)
+      p.vx = Math.cos(p.angle) * spd
+      p.vy = Math.sin(p.angle) * spd
       if (Math.random() < 0.5) spawnParticles(p.x, p.y, -p.vx * 0.15, -p.vy * 0.15, 'exhaust', 1)
     }
 
@@ -2562,6 +2697,51 @@ function drawTraders() {
   }
 }
 
+// ─── Target box ───────────────────────────────────────────────────────────────
+
+function drawTargetBox() {
+  if (!navCombatTarget) return
+  const t  = navCombatTarget
+  const tx = t.x
+  const ty = t.y
+  if (tx == null || ty == null) return
+
+  const half      = (t.ship ? spriteSize(t.ship.hull) * 0.55 : 22) + 8
+  const cornerLen = half * 0.42
+
+  // Colour: red = actively hostile, orange = pirate not yet in range, blue = neutral/friendly
+  let boxColor, boxGlow
+  const distToPlayer = Math.hypot(t.x - player.x, t.y - player.y)
+  if (civilianNPCs.includes(t) && t.hostile) {
+    boxColor = '#ff3333'; boxGlow = 'rgba(255,60,60,0.7)'
+  } else if (enemies.includes(t) && distToPlayer < WEAPON_RANGE) {
+    boxColor = '#ff3333'; boxGlow = 'rgba(255,60,60,0.7)'
+  } else if (enemies.includes(t)) {
+    boxColor = '#ff8800'; boxGlow = 'rgba(255,140,0,0.7)'
+  } else {
+    boxColor = '#88ccff'; boxGlow = 'rgba(100,200,255,0.7)'
+  }
+
+  ctx.save()
+  ctx.strokeStyle = boxColor
+  ctx.lineWidth   = 2.5
+  ctx.lineCap     = 'square'
+  ctx.shadowColor = boxGlow
+  ctx.shadowBlur  = 8
+
+  for (const [sx, sy] of [[-1,-1],[1,-1],[1,1],[-1,1]]) {
+    const cx = tx + sx * half
+    const cy = ty + sy * half
+    ctx.beginPath()
+    ctx.moveTo(cx - sx * cornerLen, cy)   // horizontal arm end
+    ctx.lineTo(cx, cy)                     // corner vertex
+    ctx.lineTo(cx, cy - sy * cornerLen)   // vertical arm end
+    ctx.stroke()
+  }
+
+  ctx.restore()
+}
+
 // ─── Event draw ───────────────────────────────────────────────────────────────
 
 function drawEventLog() {
@@ -2807,6 +2987,8 @@ canvas.addEventListener('mousemove', e => {
     if (panMoved) { viewOffsetX = panOriginX + dx; viewOffsetY = panOriginY + dy }
   }
 })
+
+canvas.addEventListener('contextmenu', e => e.preventDefault())
 
 canvas.addEventListener('mousedown', e => {
   if (e.button !== 0 || !galaxyMapOpen) return
@@ -3127,15 +3309,25 @@ function updateBoostHUD() {
 }
 
 function cycleNavTarget() {
-  if (!enemies.length) { navCombatTarget = null; return }
-  // Clear dead reference
-  if (navCombatTarget && !enemies.includes(navCombatTarget)) navCombatTarget = null
+  const pool = [
+    ...enemies,
+    ...civilianNPCs,
+    ...npcTraders.filter(t => t.system === player.system && t.state !== 'transit')
+  ]
+  if (!pool.length) { navCombatTarget = null; return }
+  if (navCombatTarget && !pool.includes(navCombatTarget)) navCombatTarget = null
   if (!navCombatTarget) {
-    navCombatTarget = enemies[0]
+    navCombatTarget = pool[0]
   } else {
-    const idx = enemies.indexOf(navCombatTarget)
-    navCombatTarget = idx >= enemies.length - 1 ? null : enemies[idx + 1]
+    const idx = pool.indexOf(navCombatTarget)
+    navCombatTarget = idx >= pool.length - 1 ? null : pool[idx + 1]
   }
+}
+
+function isTargetHostile(t) {
+  if (enemies.includes(t))      return true
+  if (civilianNPCs.includes(t)) return t.hostile
+  return false  // traders
 }
 
 function updateSidePanel() {
@@ -3180,15 +3372,20 @@ function updateSidePanel() {
   }
 
   // Clear dead nav target
-  if (navCombatTarget && !enemies.includes(navCombatTarget)) navCombatTarget = null
+  const allTargets  = [
+    ...enemies, ...civilianNPCs,
+    ...npcTraders.filter(t => t.system === player.system && t.state !== 'transit')
+  ]
+  const allHostiles = [...enemies, ...civilianNPCs.filter(c => c.hostile)]
+  if (navCombatTarget && !allTargets.includes(navCombatTarget)) navCombatTarget = null
 
-  // Target section — show nearest enemy; highlight if TAB-locked
+  // Target section — show nearest hostile (or TAB-locked target)
   const targetSection = document.getElementById('sp-target-section')
   if (targetSection) {
     let target = navCombatTarget
-    if (!target && enemies.length > 0) {
+    if (!target && allHostiles.length > 0) {
       let nearestD = Infinity
-      for (const e of enemies) {
+      for (const e of allHostiles) {
         const d = Math.hypot(player.x - e.x, player.y - e.y)
         if (d < nearestD) { nearestD = d; target = e }
       }
@@ -3198,10 +3395,19 @@ function updateSidePanel() {
       const elName = document.getElementById('sp-target-name')
       const elType = document.getElementById('sp-target-type')
       const elHp   = document.getElementById('sp-target-hp')
-      if (elName) elName.innerText = target.name || target.ship.name
-      if (elType) elType.innerText = target.bountyMissionId ? 'BOUNTY TARGET' : 'PIRATE'
+      if (elName) elName.innerText = target.name || target.ship?.name || 'Trader'
+      const hostile = isTargetHostile(target)
+      const typeLabel = target.bountyMissionId  ? 'BOUNTY TARGET'
+                      : npcTraders.includes(target) ? 'TRADER'
+                      : civilianNPCs.includes(target) ? (hostile ? 'HOSTILE CIVILIAN' : 'CIVILIAN')
+                      : 'PIRATE'
+      if (elType) {
+        elType.innerText   = typeLabel
+        elType.style.color = hostile ? '#ff6644' : '#44dd88'
+      }
       if (elHp) {
-        const pct = target.ship.hull > 0 ? Math.max(0, target.hp / target.ship.hull) : 0
+        const maxHp = target.ship?.hull ?? 80
+        const pct   = maxHp > 0 ? Math.max(0, target.hp / maxHp) : 0
         elHp.style.width = (pct * 100).toFixed(1) + '%'
       }
     } else {
@@ -3209,15 +3415,15 @@ function updateSidePanel() {
     }
   }
 
-  // Nav ship line — show TAB target, enemy count, or autopilot
+  // Nav ship line — show TAB target, hostile count, or autopilot
   const elNavShip = document.getElementById('sp-nav-ship')
   if (elNavShip) {
     if (navCombatTarget) {
       elNavShip.className = 'sp-nav-line sp-nav-ship-lock'
-      elNavShip.innerText = (navCombatTarget.name || navCombatTarget.ship.name) + ' [LOCKED]'
-    } else if (enemies.length > 0) {
+      elNavShip.innerText = (navCombatTarget.name || navCombatTarget.ship?.name || 'Trader') + ' [LOCKED]'
+    } else if (allHostiles.length > 0) {
       elNavShip.className = 'sp-nav-line sp-nav-ship-warn'
-      elNavShip.innerText = enemies.length === 1 ? '1 hostile · TAB' : `${enemies.length} hostiles · TAB`
+      elNavShip.innerText = allHostiles.length === 1 ? '1 hostile · TAB' : `${allHostiles.length} hostiles · TAB`
     } else if (autopilot) {
       elNavShip.className = 'sp-nav-line sp-nav-autopilot'
       elNavShip.innerText = 'AP → ' + autopilot.name
@@ -3588,6 +3794,7 @@ function draw(timestamp) {
 loadKeybinds()
 loadStarSprites()
 loadShipSprites()
+loadPlanetSprites()
 initTitleStars()
 initWarpStars()
 requestAnimationFrame(draw)

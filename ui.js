@@ -242,9 +242,11 @@ function buildPlanetBlock(planet) {
     btn.className = 'dev-ship-btn' + (player.ship.name === ship.name ? ' active' : '')
     btn.innerText = ship.name
     btn.onclick = () => {
-      player.ship  = { ...ship }
-      player.cargo = {}
-      player.fuel  = ship.fuel_capacity
+      player.ship        = { ...ship }
+      player.cargo       = {}
+      player.fuel        = ship.fuel_capacity
+      player.weaponSlots = Array.from({ length: ship.weapon_slots }, () => 'Laser Cannon')
+      player.upgrades    = []
       updateHUD()
       // refresh active state
       devBody.querySelectorAll('.dev-ship-btn').forEach(b => b.classList.remove('active'))
@@ -904,7 +906,7 @@ function renderUpgradeShop() {
     const atLimit      = upgrade.limit > 0 && fittedCount >= upgrade.limit
     const alreadyFitted = atLimit && upgrade.effect !== 'ammo'
     const canAfford    = player.credits >= upgrade.price
-    const prereqMet    = !upgrade.requiresUpgrade || slots.includes(upgrade.requiresUpgrade)
+    const prereqMet    = !upgrade.requiresUpgrade || slots.includes(upgrade.requiresUpgrade) || upgrades.includes(upgrade.requiresUpgrade)
     const hasFreeSlot  = slots.includes('Laser Cannon')
 
     let canInstall
@@ -1004,7 +1006,7 @@ function installUpgrade(upgradeIdx) {
   // Slot & prerequisite checks
   if (upgrade.usesUpgradeSlot && player.ship.upgrade_slots <= 0) return
   if (upgrade.usesWeaponSlot  && !slots.includes('Laser Cannon')) return
-  if (upgrade.requiresUpgrade && !slots.includes(upgrade.requiresUpgrade)) return
+  if (upgrade.requiresUpgrade && !slots.includes(upgrade.requiresUpgrade) && !upgrades.includes(upgrade.requiresUpgrade)) return
   if (upgrade.limit > 0 && upgrade.effect !== 'ammo') {
     const fitted = upgrade.usesWeaponSlot
       ? slots.filter(w => w === upgrade.name).length
