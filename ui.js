@@ -1839,6 +1839,7 @@ const KEYBIND_LABELS = {
   missile:   'Fire Missile / Rocket',
   cycleAmmo: 'Cycle Ammo Type',
   boost:     'Boost',
+  target:    'Cycle Target',
   info:      'Commander Status',
   pause:     'Pause / Menu'
 }
@@ -1846,6 +1847,7 @@ const KEYBIND_LABELS = {
 function keyLabel(k) {
   if (k === ' ')      return 'Space'
   if (k === 'Escape') return 'Esc'
+  if (k === 'Tab')    return 'Tab'
   return k.toUpperCase()
 }
 

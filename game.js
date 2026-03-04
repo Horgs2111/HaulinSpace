@@ -23,6 +23,7 @@ const DEFAULT_KEYBINDS = {
   missile:   'x',
   cycleAmmo: 'v',
   boost:     'b',
+  target:    'Tab',
   info:      'i',
   pause:     'Escape'
 }
@@ -69,7 +70,7 @@ function isKeyHeld(k) {
 
 const keys = {}
 document.addEventListener('keydown', e => {
-  if (e.key === 'Tab') { e.preventDefault(); if (gameState === 'playing' && !activePanel) cycleNavTarget(); return }
+  if (e.key === 'Tab') e.preventDefault()   // always block browser tab-focus
   keys[e.key] = true; handleActionKey(e.key)
 })
 document.addEventListener('keyup', e => { keys[e.key] = false })
@@ -119,6 +120,9 @@ function handleActionKey(key) {
       updateFuelHUD()
     }
   }
+
+  // Tab — cycle target
+  if (matchKey(key, keybinds.target)  && !activePanel && !galaxyMapOpen) cycleNavTarget()
 
   // Space — fire weapon
   if (matchKey(key, keybinds.fire)    && !activePanel && !galaxyMapOpen) firePlayerWeapon()
